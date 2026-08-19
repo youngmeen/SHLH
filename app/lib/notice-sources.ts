@@ -1,15 +1,10 @@
-import type { District, NoticeFeed, PublicNotice, SourceState } from "./notice-types";
+import { SEOUL_DISTRICTS, shortDistrictName, type District, type NoticeFeed, type PublicNotice, type SourceState } from "./notice-types.ts";
+import { stripHtmlToText } from "./html-text.ts";
+import { NOTICE_FETCH_TIMEOUT_MS, NOTICE_REQUEST_HEADERS } from "./notice-http.ts";
 
 export const MYHOME_API_URL = "https://apis.data.go.kr/1613000/HWSPR02/rsdtRcritNtcList";
 export const MYHOME_INFO_URL = "https://www.data.go.kr/data/15108420/openapi.do";
 export const SH_LIST_URL = "https://www.i-sh.co.kr/app/lay2/program/S1T294C297/www/brd/m_247/list.do";
-
-const TARGET_DISTRICTS: District[] = ["서초구", "강남구", "송파구"];
-const SEOUL_DISTRICTS = [
-  "강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구",
-  "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구",
-  "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구",
-];
 
 type MyHomeItem = {
   pblancId?: string;
@@ -37,32 +32,8 @@ type MyHomePayload = {
   };
 };
 
-const REQUEST_HEADERS = {
-  Accept: "text/html,application/xhtml+xml",
-  "Accept-Language": "ko-KR,ko;q=0.9",
-  "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-  "User-Agent": "Jibalrim-MVP/0.1 (public-housing-notice-monitor)",
-};
-
-function cleanText(value: string) {
-  return value
-    .replace(/<!--([\s\S]*?)-->/g, " ")
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;|&#160;/gi, " ")
-    .replace(/&middot;/gi, "·")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function extractCells(row: string) {
-  return [...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map((match) => cleanText(match[1]));
+  return [...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map((match) => stripHtmlToText(match[1]));
 }
 
 function formatApiDate(value?: string) {
@@ -78,23 +49,23 @@ function inferHousingType(title: string, fallback = "공공임대") {
 }
 
 function isRecruitmentPost(title: string) {
-  const followUpWords = ["경쟁률", "당첨자", "예비자 발표", "서류심사", "계약결과", "일정 연기", "접수결과"];
+  const followUpWords = ["경쟁률", "당첨자", "예비자 발표", "입주대상자", "서류심사", "계약결과", "일정 연기", "접수결과"];
   return title.includes("모집") && !followUpWords.some((word) => title.includes(word));
 }
 
+// 수집 범위가 서울 전체이므로 구를 이유로 공고를 버리지 않는다.
+// 자치구 필드가 있으면 그 구, 없으면 제목에서 찾고, 못 찾으면 서울 전체로 둔다.
 function classifySeoulScope(title: string, signgu = "") {
-  if (TARGET_DISTRICTS.includes(signgu as District)) {
+  if (SEOUL_DISTRICTS.includes(signgu as District)) {
     return { districts: [signgu as District], region: signgu };
   }
-  if (signgu && SEOUL_DISTRICTS.includes(signgu)) return null;
 
-  const targets = TARGET_DISTRICTS.filter((district) => title.includes(district) || title.includes(district.replace("구", "")));
-  const mentionsOtherDistrict = SEOUL_DISTRICTS.some(
-    (district) => !TARGET_DISTRICTS.includes(district as District) && (title.includes(district) || title.includes(district.replace("구", ""))),
-  );
-  if (targets.length > 0) return { districts: targets, region: targets.join(" · ") };
-  if (mentionsOtherDistrict) return null;
-  return { districts: TARGET_DISTRICTS, region: "서울 전체 · 상세 공급지역 확인" };
+  // "강남"과 "강남구"를 같게 본다.
+  const mentions = (district: string) => title.includes(district) || title.includes(shortDistrictName(district));
+
+  const mentioned = SEOUL_DISTRICTS.filter(mentions);
+  if (mentioned.length > 0) return { districts: mentioned, region: mentioned.join(" · ") };
+  return { districts: SEOUL_DISTRICTS, region: "서울 전체 · 상세 공급지역 확인" };
 }
 
 function normalizeAgency(name = ""): PublicNotice["agency"] {
@@ -103,8 +74,14 @@ function normalizeAgency(name = ""): PublicNotice["agency"] {
   return "기타";
 }
 
-function inferStatus(begin: string | null, end: string | null) {
-  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+// ICU 포매터 생성은 비싸다. 공고 건수만큼 만들지 않도록 모듈 스코프에 한 번만 둔다.
+const SEOUL_DATE_FORMAT = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" });
+
+function seoulToday() {
+  return SEOUL_DATE_FORMAT.format(new Date());
+}
+
+function inferStatus(begin: string | null, end: string | null, today: string) {
   if (end && end < today) return "접수마감";
   if (begin && begin <= today && (!end || today <= end)) return "접수중";
   return "공고중";
@@ -117,6 +94,7 @@ export function parseMyHomeNotices(payload: MyHomePayload): PublicNotice[] {
   const raw = payload.response?.body?.item;
   const items = (Array.isArray(raw) ? raw : raw ? [raw] : []).filter((item) => item.brtcNm === "서울특별시");
   const notices = new Map<string, PublicNotice>();
+  const today = seoulToday();
 
   for (const item of items) {
     const title = item.pblancNm?.trim() || "제목 없는 공고";
@@ -146,7 +124,7 @@ export function parseMyHomeNotices(payload: MyHomePayload): PublicNotice[] {
       publishedAt,
       applyStart,
       applyEnd,
-      status: inferStatus(applyStart, applyEnd),
+      status: inferStatus(applyStart, applyEnd, today),
       department: item.suplyInsttNm?.trim() || null,
       sourceUrl: item.url?.trim() || item.pcUrl?.trim() || MYHOME_INFO_URL,
       supplyCount: String(item.suplyHoCo ?? "").trim() || null,
@@ -193,6 +171,20 @@ export function parseShNotices(html: string): PublicNotice[] {
   return notices;
 }
 
+/**
+ * 게시판 여러 페이지의 모집공고를 하나로 합친다. 목록이 밀리면 같은 공고가
+ * 다음 페이지에 다시 나타나므로 먼저 본 것을 남긴다(앞 페이지가 더 최신이다).
+ */
+export function mergeShPages(pageHtmls: string[]): PublicNotice[] {
+  const merged = new Map<string, PublicNotice>();
+  for (const html of pageHtmls) {
+    for (const notice of parseShNotices(html)) {
+      if (!merged.has(notice.id)) merged.set(notice.id, notice);
+    }
+  }
+  return [...merged.values()];
+}
+
 async function collectMyHome() {
   const key = process.env.MOLIT_MYHOME_API_KEY;
   if (!key) throw new Error("MOLIT_MYHOME_API_KEY가 설정되지 않았습니다.");
@@ -204,7 +196,7 @@ async function collectMyHome() {
     try {
       const response = await fetch(url, {
         headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(12_000),
+        signal: AbortSignal.timeout(NOTICE_FETCH_TIMEOUT_MS),
       });
       if (!response.ok) throw new Error(`마이홈 HTTP ${response.status}`);
       return parseMyHomeNotices(await response.json() as MyHomePayload);
@@ -215,16 +207,29 @@ async function collectMyHome() {
   throw lastError ?? new Error("마이홈 수집 실패");
 }
 
-async function collectSh() {
-  const body = new URLSearchParams({ page: "1", multi_itm_seq: "2", srchTp: "0", srchWord: "모집" });
+// 한 페이지는 10행이다. 1페이지만 읽으면 아직 접수 중인 공고를 놓치므로
+// 여러 페이지를 읽는다. srchWord="모집"은 서버가 제목으로 걸러주는 것이라
+// 같은 페이지 수로 훨씬 많은 모집공고를 가져온다(5페이지에 31건).
+const SH_LIST_PAGE_COUNT = 5;
+
+async function fetchShPage(page: number) {
+  const body = new URLSearchParams({ page: String(page), multi_itm_seq: "2", srchTp: "0", srchWord: "모집" });
   const response = await fetch(SH_LIST_URL, {
     method: "POST",
-    headers: REQUEST_HEADERS,
+    // Content-Type은 폼을 POST하는 이 호출에만 필요하다.
+    headers: { ...NOTICE_REQUEST_HEADERS, "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
     body: body.toString(),
-    signal: AbortSignal.timeout(12_000),
+    signal: AbortSignal.timeout(NOTICE_FETCH_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`SH HTTP ${response.status}`);
-  return parseShNotices(await response.text());
+  return response.text();
+}
+
+async function collectSh() {
+  const pages = await Promise.all(
+    Array.from({ length: SH_LIST_PAGE_COUNT }, (_, index) => fetchShPage(index + 1)),
+  );
+  return mergeShPages(pages);
 }
 
 export async function collectNoticeFeed(): Promise<NoticeFeed> {

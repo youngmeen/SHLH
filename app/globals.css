@@ -162,12 +162,6 @@ a { color: inherit; text-decoration: none; }
 .statusPill.eligible { background: var(--green-soft); color: var(--green); }
 .statusPill.review { background: var(--amber-soft); color: #8b6018; }
 .statusPill.unlikely { background: var(--red-soft); color: var(--red); }
-.score { margin-top: 12px; display: flex; align-items: baseline; }
-.score strong { font-size: 25px; line-height: 1; }
-.score small { color: var(--muted); font-size: 9px; }
-.scoreBar { height: 4px; margin-top: 8px; overflow: hidden; border-radius: 999px; background: #e0e4de; }
-.scoreBar span { height: 100%; display: block; border-radius: inherit; background: var(--green); }
-.matchPanel > small { margin-top: 7px; color: var(--muted); font-size: 9px; }
 .matchPanel button { margin-top: auto; min-height: 31px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--ink); font-size: 9px; font-weight: 800; }
 .sourceStamp { margin: 15px 0; display: flex; flex-direction: column; }
 .sourceStamp strong { font-size: 24px; letter-spacing: -.04em; }
@@ -223,7 +217,7 @@ a { color: inherit; text-decoration: none; }
 .messageBubble dl { margin: 0; font-size: 8px; }
 .messageBubble dl div { display: flex; justify-content: space-between; }
 .messageBubble dd { margin: 0; font-weight: 800; }
-.messageBubble button, .messageBubble > a { width: 100%; min-height: 28px; margin-top: 8px; display: grid; place-items: center; border: 0; border-radius: 6px; background: var(--blue); color: white; font-size: 8px; font-weight: 800; }
+.messageBubble > a { width: 100%; min-height: 28px; margin-top: 8px; display: grid; place-items: center; border: 0; border-radius: 6px; background: var(--blue); color: white; font-size: 8px; font-weight: 800; }
 
 footer { min-height: 96px; padding: 22px max(22px, calc((100vw - 1440px) / 2)); display: flex; align-items: center; gap: 26px; background: var(--ink); color: white; }
 footer > div { margin-right: auto; display: flex; align-items: center; gap: 9px; }
@@ -297,3 +291,5 @@ footer p { margin: 0; color: rgba(255,255,255,.5); font-size: 10px; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+.panelTitle h2 .saveState { margin-left: 8px; color: var(--muted); font-size: 9px; font-weight: 700; vertical-align: middle; }

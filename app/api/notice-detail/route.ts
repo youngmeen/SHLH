@@ -1,10 +1,5 @@
 import { isAllowedNoticeUrl, parseNoticeDetailHtml } from "../../lib/notice-detail.ts";
-
-const REQUEST_HEADERS = {
-  Accept: "text/html,application/xhtml+xml",
-  "Accept-Language": "ko-KR,ko;q=0.9",
-  "User-Agent": "Jibalrim-MVP/0.1 (public-housing-notice-monitor)",
-};
+import { NOTICE_FETCH_TIMEOUT_MS, NOTICE_REQUEST_HEADERS } from "../../lib/notice-http.ts";
 
 export async function GET(request: Request) {
   const sourceUrl = new URL(request.url).searchParams.get("sourceUrl") ?? "";
@@ -14,8 +9,8 @@ export async function GET(request: Request) {
 
   try {
     const response = await fetch(sourceUrl, {
-      headers: REQUEST_HEADERS,
-      signal: AbortSignal.timeout(12_000),
+      headers: NOTICE_REQUEST_HEADERS,
+      signal: AbortSignal.timeout(NOTICE_FETCH_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`공고 상세 HTTP ${response.status}`);
 

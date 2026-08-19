@@ -6,6 +6,9 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
+    // 테스트가 소스를 Node로 직접 import하므로 앱 코드는 상대 경로에 .ts를 붙인다.
+    // 전사(transpile)는 vinext/Vite가 하고 tsc는 검사만 하므로 켜도 안전하다.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
