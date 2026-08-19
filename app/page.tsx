@@ -26,6 +26,19 @@ const fitPresentation: Record<AudienceStatus, { shortlist: string; verdict: stri
   mismatch: { shortlist: "자격 추가 확인", verdict: "현재 조건으로 비추천", tone: "fail", mark: "×" },
 };
 
+// 판정 상태별 묶음 제목. fitPresentation과 달리 목록 묶음용 문구다.
+const groupTitles: Record<AudienceStatus, string> = {
+  likely: "우선 확인할 공고",
+  review: "판정 불가",
+  mismatch: "조건 불일치",
+};
+
+const groupNotes: Record<AudienceStatus, string> = {
+  likely: "입력한 조건과 관련 있는 공고입니다. 세부 자격은 원문에서 확인하세요.",
+  review: "제목만으로는 대상 계층을 알 수 없습니다. 원문의 신청 자격을 직접 확인해야 합니다.",
+  mismatch: "입력한 조건과 명백히 다른 대상입니다.",
+};
+
 const agencyOptions = [
   { key: "all" as const, chip: "전체", glyph: "합", icon: "success", caption: "전체 공고" },
   { key: "LH" as const, chip: "LH", glyph: "LH", icon: "caution", caption: "마이홈·LH" },
@@ -160,21 +173,12 @@ export default function Home() {
   const visibleResults = byAgency(agencyFilter);
   const selectedResult = visibleResults.find(({ notice }) => notice.id === selectedId) ?? visibleResults[0];
   const selected = selectedResult?.notice;
-  const supportRecommendations = evaluatedNotices
-    .filter(({ notice, fit }) => fit.status !== "mismatch" && notice.status !== "접수마감")
-    .sort((a, b) => Number(b.fit.status === "likely") - Number(a.fit.status === "likely"))
-    .slice(0, 3);
-
-  // 추천을 별도 박스로 두면 같은 공고가 아래 목록과 중복된다. 목록 맨 위로 올리고
-  // 배지만 붙인다. 현재 필터에 걸려 목록에 없는 추천은 넣지 않는다.
-  const visibleIds = new Set(visibleResults.map(({ notice }) => notice.id));
-  const recommendedIds = new Set(
-    supportRecommendations.filter(({ notice }) => visibleIds.has(notice.id)).map(({ notice }) => notice.id),
-  );
-  const orderedResults = [
-    ...visibleResults.filter(({ notice }) => recommendedIds.has(notice.id)),
-    ...visibleResults.filter(({ notice }) => !recommendedIds.has(notice.id)),
-  ];
+  // 판정 결과별로 묶어서 보여준다. 섞어놓으면 "제목으로 판정할 수 없는 공고"가
+  // 조건에 맞는 공고처럼 읽힌다. 제목만으로 신청 가능을 확정하지 않는다는
+  // 원칙에 따라 판정 불가를 따로 세운다.
+  const groups = (["likely", "review", "mismatch"] as AudienceStatus[])
+    .map((status) => ({ status, items: visibleResults.filter(({ fit }) => fit.status === status) }))
+    .filter((group) => group.items.length > 0);
 
   // 주소 문자열에만 반응한다. 목록이 새로 들어와 같은 공고의 객체 참조만 바뀌는
   // 경우에 상세를 다시 읽지 않기 위한 것이다.
@@ -267,6 +271,7 @@ export default function Home() {
         <div className="summaryCount">
           <p className="eyebrow">서울 공공임대 공고 모니터</p>
           <h1>내 조건으로 확인할 공고가 <em>{loading ? "···" : `${conditionResults.length}건`}</em></h1>
+          <p className="summaryNote">‘조건 추천’은 명백히 다른 대상만 제외합니다. 제목으로 판정할 수 없는 공고는 <b>판정 불가</b>로 따로 묶어 보여줍니다.</p>
         </div>
         <div className="summaryFilters">
           <div className="filters" aria-label="조건 필터">
@@ -287,36 +292,40 @@ export default function Home() {
 
       <div className="browser">
         <section className="noticeColumn" aria-label="모집공고 목록" aria-busy={loading}>
-          {loading && orderedResults.length === 0 && <div className="emptyState"><strong>공식 공고를 확인하고 있습니다.</strong><p>마이홈과 SH 소스를 순서대로 읽는 중입니다.</p></div>}
+          {loading && visibleResults.length === 0 && <div className="emptyState"><strong>공식 공고를 확인하고 있습니다.</strong><p>마이홈과 SH 소스를 순서대로 읽는 중입니다.</p></div>}
 
-          {orderedResults.map(({ notice, fit }, index) => (
-            <div key={notice.id}>
-              {index === 0 && recommendedIds.size > 0 && <p className="listDivider">우선 확인할 공고</p>}
-              {index === recommendedIds.size && index > 0 && <p className="listDivider">나머지 {orderedResults.length - recommendedIds.size}건</p>}
-              <button
-                type="button"
-                className={`noticeCard ${selected?.id === notice.id ? "selected" : ""} ${fit.status === "mismatch" ? "mismatch" : ""}`}
-                onClick={() => selectNotice(notice.id)}
-                aria-current={selected?.id === notice.id}
-              >
-                <div className="noticeMeta">
-                  <span className={`agency ${notice.agency.toLowerCase()}`}>{notice.agency}</span>
-                  {recommendedIds.has(notice.id) && <span className="recommendBadge">추천</span>}
-                  <span className={`statusPill ${statusClass(notice.status)}`}>{notice.status}</span>
-                </div>
-                <h3>{notice.title}</h3>
-                <p>{notice.region} · {notice.housingType}</p>
-                <div className="noticeFacts">
-                  <span><small>게시일</small><strong>{formatDate(notice.publishedAt)}</strong></span>
-                  <span><small>접수 마감</small><strong>{formatDate(notice.applyEnd)}</strong></span>
-                  <span><small>공급 규모</small><strong>{notice.supplyCount ?? "원문 확인"}</strong></span>
-                </div>
-                <span className={`fitPill ${fit.status}`}>{fit.label}</span>
-              </button>
-            </div>
+          {groups.map((group) => (
+            <section className="noticeGroup" key={group.status} aria-labelledby={`group-${group.status}`}>
+              <p className={`listDivider ${group.status}`} id={`group-${group.status}`}>
+                {groupTitles[group.status]} <b>{group.items.length}</b>
+                <small>{groupNotes[group.status]}</small>
+              </p>
+              {group.items.map(({ notice, fit }) => (
+                <button
+                  type="button"
+                  key={notice.id}
+                  className={`noticeCard ${selected?.id === notice.id ? "selected" : ""} ${fit.status === "mismatch" ? "mismatch" : ""}`}
+                  onClick={() => selectNotice(notice.id)}
+                  aria-current={selected?.id === notice.id}
+                >
+                  <div className="noticeMeta">
+                    <span className={`agency ${notice.agency.toLowerCase()}`}>{notice.agency}</span>
+                    <span className={`statusPill ${statusClass(notice.status)}`}>{notice.status}</span>
+                  </div>
+                  <h3>{notice.title}</h3>
+                  <p>{notice.region} · {notice.housingType}</p>
+                  <div className="noticeFacts">
+                    <span><small>게시일</small><strong>{formatDate(notice.publishedAt)}</strong></span>
+                    <span><small>접수 마감</small><strong>{formatDate(notice.applyEnd)}</strong></span>
+                    <span><small>공급 규모</small><strong>{notice.supplyCount ?? "원문 확인"}</strong></span>
+                  </div>
+                  <span className={`fitPill ${fit.status}`}>{fit.label}</span>
+                </button>
+              ))}
+            </section>
           ))}
 
-          {!loading && orderedResults.length === 0 && <div className="emptyState"><strong>현재 내 조건에 추천할 공고가 없습니다.</strong><p>‘전체 공고’에서 제외된 공고를 확인하거나 관심 지역·공급기관을 바꿔 주세요.</p><button type="button" onClick={() => setConditionView("all")}>전체 공고 보기</button></div>}
+          {!loading && visibleResults.length === 0 && <div className="emptyState"><strong>현재 내 조건에 추천할 공고가 없습니다.</strong><p>‘전체 공고’에서 제외된 공고를 확인하거나 관심 지역·공급기관을 바꿔 주세요.</p><button type="button" onClick={() => setConditionView("all")}>전체 공고 보기</button></div>}
         </section>
 
         <aside className={`detailColumn ${detailSheet ? "asSheet" : ""}`} id="notice-detail">
