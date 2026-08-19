@@ -72,6 +72,9 @@ export default function Home() {
   // 저장된 프로필을 읽기 전에는 저장하지 않는다. 기본값으로 덮어쓰면 안 된다.
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [profileOpen, setProfileOpen] = useState(false);
+  // 좁은 화면에서는 상세가 목록 아래로 밀려 보이지 않는다. 덮어서 띄운다.
+  const [detailSheet, setDetailSheet] = useState(false);
 
   // 저장소에 있는 것과 같은 값을 다시 쓰지 않기 위한 기준값.
   const savedSnapshot = useRef<string | null>(null);
@@ -162,6 +165,17 @@ export default function Home() {
     .sort((a, b) => Number(b.fit.status === "likely") - Number(a.fit.status === "likely"))
     .slice(0, 3);
 
+  // 추천을 별도 박스로 두면 같은 공고가 아래 목록과 중복된다. 목록 맨 위로 올리고
+  // 배지만 붙인다. 현재 필터에 걸려 목록에 없는 추천은 넣지 않는다.
+  const visibleIds = new Set(visibleResults.map(({ notice }) => notice.id));
+  const recommendedIds = new Set(
+    supportRecommendations.filter(({ notice }) => visibleIds.has(notice.id)).map(({ notice }) => notice.id),
+  );
+  const orderedResults = [
+    ...visibleResults.filter(({ notice }) => recommendedIds.has(notice.id)),
+    ...visibleResults.filter(({ notice }) => !recommendedIds.has(notice.id)),
+  ];
+
   // 주소 문자열에만 반응한다. 목록이 새로 들어와 같은 공고의 객체 참조만 바뀌는
   // 경우에 상세를 다시 읽지 않기 위한 것이다.
   const selectedSourceUrl = selected?.sourceUrl;
@@ -215,6 +229,12 @@ export default function Home() {
     }));
   }
 
+  // 2단이 안 되는 폭에서는 상세를 덮어서 띄운다. 누른 결과가 항상 바로 보여야 한다.
+  function selectNotice(id: string) {
+    setSelectedId(id);
+    if (!window.matchMedia("(min-width: 720px)").matches) setDetailSheet(true);
+  }
+
   function simulateTelegram(title: string) {
     setSentNotice(title);
     window.setTimeout(() => setSentNotice(null), 3200);
@@ -222,14 +242,20 @@ export default function Home() {
 
   function searchWithProfile() {
     setConditionView("matched");
-    document.getElementById("notice-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setProfileOpen(false);
   }
+
+  const profileSummary = `${profile.age}세 · ${profile.householdSize}인 · ${profile.monthlyIncome.toLocaleString()}만원`;
+  const okSources = feed.sources.filter((source) => source.ok).length;
 
   return (
     <main className="appShell">
       <header className="appHeader">
         <a className="brand" href="#top" aria-label="집알림 처음으로"><span className="brandMark">집</span><span>집알림</span><small>BETA</small></a>
         <div className="headerStatus"><span className={`pulse ${error ? "warning" : ""}`} />{loading ? "공식 공고 확인 중" : `공식 공고 ${feed.notices.length}건 연결`}</div>
+        <button className="profileButton" type="button" onClick={() => setProfileOpen(true)} aria-haspopup="dialog">
+          <small>내 조건</small><strong>{profileSummary}</strong>
+        </button>
         <button className="telegramButton" type="button" onClick={() => void loadNotices(true)} disabled={loading}>{loading ? "불러오는 중" : "공고 새로고침"}</button>
       </header>
 
@@ -237,122 +263,65 @@ export default function Home() {
         <strong>실데이터 BETA</strong><span>마이홈 API와 SH 공식 게시판을 읽습니다. 신청 자격과 접수 가능 여부는 반드시 원문에서 최종 확인하세요.</span>
       </div>
 
-      <div className="workspace" id="top">
-        <aside className="profileSidebar">
-          <div className="panelTitle"><div><p>MY PROFILE</p><h2>내 조건{saveStateLabel && <small className="saveState">{saveStateLabel}</small>}</h2></div><button type="button" onClick={() => void loadProfile()}>되돌리기</button></div>
-
-          <fieldset className="fieldGroup districtGroup">
-            <legend>관심 지역</legend>
-            <div className="chipGrid">
-              {SEOUL_DISTRICTS.map((district) => (
-                <label className={profile.districts.includes(district) ? "checked" : ""} key={district}>
-                  <input type="checkbox" checked={profile.districts.includes(district)} onChange={() => toggleDistrict(district)} />{shortDistrictName(district)}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          <div className="inputGrid">
-            <label><span>나이</span><div><input type="number" min="19" max="100" value={profile.age} onChange={(event) => updateNumber("age", event.target.value)} /><em>세</em></div></label>
-            <label><span>가구원</span><div><input type="number" min="1" max="10" value={profile.householdSize} onChange={(event) => updateNumber("householdSize", event.target.value)} /><em>명</em></div></label>
-            <label className="wide"><span>세대 월소득</span><div><input type="number" min="0" step="10" value={profile.monthlyIncome} onChange={(event) => updateNumber("monthlyIncome", event.target.value)} /><em>만원</em></div></label>
-            <label className="wide"><span>총자산</span><div><input type="number" min="0" step="100" value={profile.totalAssets} onChange={(event) => updateNumber("totalAssets", event.target.value)} /><em>만원</em></div></label>
-            <label><span>자녀 수</span><div><input type="number" min="0" max="10" value={profile.children} onChange={(event) => updateNumber("children", event.target.value)} /><em>명</em></div></label>
-            <label><span>막내 생년월일</span><div><input type="date" disabled={profile.children === 0} value={profile.youngestChildBirthDate} onChange={(event) => updateField("youngestChildBirthDate", event.target.value)} /></div></label>
+      <div className="summaryBar" id="top">
+        <div className="summaryCount">
+          <p className="eyebrow">서울 공공임대 공고 모니터</p>
+          <h1>내 조건으로 확인할 공고가 <em>{loading ? "···" : `${conditionResults.length}건`}</em></h1>
+        </div>
+        <div className="summaryFilters">
+          <div className="filters" aria-label="조건 필터">
+            <button type="button" className={conditionView === "matched" ? "active" : ""} onClick={() => setConditionView("matched")}>조건 추천</button>
+            <button type="button" className={conditionView === "all" ? "active" : ""} onClick={() => setConditionView("all")}>전체 공고</button>
           </div>
-
-          <fieldset className="fieldGroup segmentGroup">
-            <legend>혼인 상태</legend>
-            <div className="threeWay">
-              {(Object.keys(maritalLabels) as MaritalStatus[]).map((status) => <label className={profile.maritalStatus === status ? "checked" : ""} key={status}><input type="radio" name="maritalStatus" checked={profile.maritalStatus === status} onChange={() => updateField("maritalStatus", status)} />{maritalLabels[status]}</label>)}
-            </div>
-          </fieldset>
-
-          {profile.maritalStatus !== "single" && <div className="inputGrid profileDateField"><label className="wide"><span>{profile.maritalStatus === "married" ? "혼인신고일" : "혼인예정일"}</span><div><input type="date" value={profile.marriageDate} onChange={(event) => updateField("marriageDate", event.target.value)} /></div></label></div>}
-
-          <div className="toggleStack">
-            <label className="houseToggle"><div><strong>임신 중</strong><span>태아 포함 기준 확인용</span></div><input type="checkbox" checked={profile.isPregnant} onChange={(event) => updateField("isPregnant", event.target.checked)} /></label>
-            <label className="houseToggle"><div><strong>한부모 가구</strong><span>특별공급 대상 확인용</span></div><input type="checkbox" checked={profile.isSingleParent} onChange={(event) => updateField("isSingleParent", event.target.checked)} /></label>
-            <label className="houseToggle"><div><strong>주택 보유</strong><span>무주택 세대구성원 확인용</span></div><input type="checkbox" checked={profile.hasHouse} onChange={(event) => updateField("hasHouse", event.target.checked)} /></label>
+          <div className="filters" aria-label="공급기관 필터">
+            {agencyOptions.map((option) => <button type="button" key={option.key} className={agencyFilter === option.key ? "active" : ""} onClick={() => setAgencyFilter(option.key)}>{option.chip} {byAgency(option.key).length}</button>)}
           </div>
+        </div>
+        <div className="summaryMeta">
+          <span>최근 공식 수집 {formatFetchedAt(feed.fetchedAt)}</span>
+          <small>{okSources}/{feed.sources.length || 2}개 소스 정상 · 15분 캐시</small>
+        </div>
+      </div>
 
-          <button className="conditionSearchButton" type="button" onClick={searchWithProfile}>내 조건으로 공고 찾기</button>
+      {error && <p className="summaryError" role="status">{error}</p>}
 
-          <div className="privacyCard"><strong>입력값 보호</strong><p>프로필은 이 컴퓨터의 로컬 데이터베이스에만 저장하며 공식 API나 외부 서비스로 전송하지 않습니다. 알림이 브라우저를 열지 않고도 판정하기 위해 저장합니다. 소득·자산 자동판정은 상세 기준 구조화 후 연결됩니다.</p></div>
-        </aside>
+      <div className="browser">
+        <section className="noticeColumn" aria-label="모집공고 목록" aria-busy={loading}>
+          {loading && orderedResults.length === 0 && <div className="emptyState"><strong>공식 공고를 확인하고 있습니다.</strong><p>마이홈과 SH 소스를 순서대로 읽는 중입니다.</p></div>}
 
-        <section className="dashboard">
-          <div className="dashboardIntro">
-            <div><p className="eyebrow">서울 공공임대 공고 모니터</p><h1>내 조건으로 확인할 공고가<br /><em>{loading ? "···" : `${conditionResults.length}건`}</em> 있습니다.</h1><p>명백히 다른 대상 공고는 추천에서 제외하고, 전체 공고에서는 모두 볼 수 있습니다.</p></div>
-            <div className="scanCard">
-              <span>최근 공식 수집</span><strong>{formatFetchedAt(feed.fetchedAt)}</strong>
-              <small>{feed.sources.filter((source) => source.ok).length}/{feed.sources.length || 2}개 소스 정상</small>
-              <i>{error ? "일부 지연" : "15분 캐시"}</i>
-            </div>
-          </div>
-
-          <div className="summaryCards">
-            {agencyOptions.map((option) => (
-              <button type="button" key={option.key} onClick={() => setAgencyFilter(option.key)} className={agencyFilter === option.key ? "active" : ""}><span className={`summaryIcon ${option.icon}`}>{option.glyph}</span><div><small>{option.caption}</small><strong>{byAgency(option.key).length}</strong></div></button>
-            ))}
-          </div>
-
-          <div className="sourceStatus" aria-live="polite">
-            {feed.sources.map((source) => <a href={source.sourceUrl} target="_blank" rel="noreferrer" key={source.id}><span className={`sourceDot ${source.ok ? "ok" : "fail"}`} /><strong>{source.label}</strong><small>{source.ok ? `${source.count}건 수집` : source.message}</small></a>)}
-            {error && <p>{error}</p>}
-          </div>
-
-          <section className="recommendationBoard" aria-labelledby="recommendation-title">
-            <div className="recommendationHeader"><div><p>MY SHORTLIST</p><h2 id="recommendation-title">우선 확인할 공고</h2></div><span>경쟁률이 아니라 입력 조건과 접수 상태 기준</span></div>
-            <div className="recommendationList">
-              {supportRecommendations.map(({ notice, fit }, index) => (
-                <button type="button" key={notice.id} onClick={() => setSelectedId(notice.id)}>
-                  <b>{index + 1}</b>
-                  <span><small>{fitPresentation[fit.status].shortlist}</small><strong>{notice.title}</strong><em>{fit.detail}</em></span>
-                  <i>{notice.supplyCount ?? "공급 규모 원문 확인"}</i>
-                </button>
-              ))}
-              {supportRecommendations.length === 0 && <div className="recommendationEmpty"><strong>현재 바로 추천할 공고가 없습니다.</strong><span>조건을 보완하거나 전체 공고에서 추가 자격을 확인해 주세요.</span></div>}
-            </div>
-          </section>
-
-          <div className="listHeader" id="notice-results">
-            <div><h2>실제 모집공고</h2><span>{visibleResults.length}개 결과</span></div>
-            <div className="listControls">
-              <div className="filters" aria-label="조건 필터">
-                <button type="button" className={conditionView === "matched" ? "active" : ""} onClick={() => setConditionView("matched")}>조건 추천</button>
-                <button type="button" className={conditionView === "all" ? "active" : ""} onClick={() => setConditionView("all")}>전체 공고</button>
-              </div>
-              <div className="filters" aria-label="공급기관 필터">
-                {agencyOptions.map((option) => <button type="button" key={option.key} className={agencyFilter === option.key ? "active" : ""} onClick={() => setAgencyFilter(option.key)}>{option.chip}</button>)}
-              </div>
-            </div>
-          </div>
-
-          <div className="noticeList" aria-busy={loading}>
-            {loading && visibleResults.length === 0 && <div className="emptyState"><strong>공식 공고를 확인하고 있습니다.</strong><p>마이홈과 SH 소스를 순서대로 읽는 중입니다.</p></div>}
-            {visibleResults.map(({ notice, fit }) => (
-              <article className={`noticeCard ${selected?.id === notice.id ? "selected" : ""} ${fit.status === "mismatch" ? "mismatch" : ""}`} key={notice.id}>
-                <div className="noticeMain">
-                  <div className="noticeMeta"><span className={`agency ${notice.agency.toLowerCase()}`}>{notice.agency}</span><span>{notice.region}</span><span>{notice.housingType}</span><span>공식 데이터</span></div>
-                  <h3>{notice.title}</h3><p>{notice.department ? `${notice.department} 제공` : "공식 공고 원문에서 세부 내용을 확인하세요."}</p>
-                  <div className="noticeFacts">
-                    <span><small>게시일</small><strong>{formatDate(notice.publishedAt)}</strong></span>
-                    <span><small>접수 시작</small><strong>{formatDate(notice.applyStart)}</strong></span>
-                    <span><small>접수 마감</small><strong>{formatDate(notice.applyEnd)}</strong></span>
-                    <span><small>공급 규모</small><strong>{notice.supplyCount ?? "원문 확인"}</strong></span>
-                  </div>
+          {orderedResults.map(({ notice, fit }, index) => (
+            <div key={notice.id}>
+              {index === 0 && recommendedIds.size > 0 && <p className="listDivider">우선 확인할 공고</p>}
+              {index === recommendedIds.size && index > 0 && <p className="listDivider">나머지 {orderedResults.length - recommendedIds.size}건</p>}
+              <button
+                type="button"
+                className={`noticeCard ${selected?.id === notice.id ? "selected" : ""} ${fit.status === "mismatch" ? "mismatch" : ""}`}
+                onClick={() => selectNotice(notice.id)}
+                aria-current={selected?.id === notice.id}
+              >
+                <div className="noticeMeta">
+                  <span className={`agency ${notice.agency.toLowerCase()}`}>{notice.agency}</span>
+                  {recommendedIds.has(notice.id) && <span className="recommendBadge">추천</span>}
+                  <span className={`statusPill ${statusClass(notice.status)}`}>{notice.status}</span>
                 </div>
-                <div className="matchPanel">
-                  <div className="statusGroup"><span className={`fitPill ${fit.status}`}>{fit.label}</span><span className={`statusPill ${statusClass(notice.status)}`}>{notice.status}</span></div>
-                  <div className="sourceStamp"><strong>{notice.agency}</strong><small>공식 원문 연결</small></div>
-                  <button type="button" onClick={() => setSelectedId(notice.id)}>공고 확인하기</button>
+                <h3>{notice.title}</h3>
+                <p>{notice.region} · {notice.housingType}</p>
+                <div className="noticeFacts">
+                  <span><small>게시일</small><strong>{formatDate(notice.publishedAt)}</strong></span>
+                  <span><small>접수 마감</small><strong>{formatDate(notice.applyEnd)}</strong></span>
+                  <span><small>공급 규모</small><strong>{notice.supplyCount ?? "원문 확인"}</strong></span>
                 </div>
-              </article>
-            ))}
-            {!loading && visibleResults.length === 0 && <div className="emptyState"><strong>현재 내 조건에 추천할 공고가 없습니다.</strong><p>‘전체 공고’에서 제외된 공고를 확인하거나 관심 지역·공급기관을 바꿔 주세요.</p><button type="button" onClick={() => setConditionView("all")}>전체 공고 보기</button></div>}
-          </div>
+                <span className={`fitPill ${fit.status}`}>{fit.label}</span>
+              </button>
+            </div>
+          ))}
 
+          {!loading && orderedResults.length === 0 && <div className="emptyState"><strong>현재 내 조건에 추천할 공고가 없습니다.</strong><p>‘전체 공고’에서 제외된 공고를 확인하거나 관심 지역·공급기관을 바꿔 주세요.</p><button type="button" onClick={() => setConditionView("all")}>전체 공고 보기</button></div>}
+        </section>
+
+        <aside className={`detailColumn ${detailSheet ? "asSheet" : ""}`} id="notice-detail">
+          <button type="button" className="sheetClose" onClick={() => setDetailSheet(false)}>← 목록으로</button>
+          {!selected && <div className="detailEmpty"><strong>공고를 선택하세요.</strong><p>왼쪽 목록에서 공고를 고르면 신청자격과 임대조건을 여기에 보여줍니다.</p></div>}
           {selected && (
             <section className="detailPanel" aria-live="polite">
               <div className="detailHeader"><div><p>공식 공고 상세 확인</p><h2>{selected.title}</h2></div><div className="detailActions"><a href={selected.sourceUrl} target="_blank" rel="noreferrer">공식 신청 페이지</a><button type="button" onClick={() => simulateTelegram(selected.title)}>텔레그램 알림 미리보기</button></div></div>
@@ -376,6 +345,7 @@ export default function Home() {
                   </div>
                 )}
               </section>
+
               <div className="detailGrid">
                 <div className="checks">
                   <div className="pass"><span>✓</span><div><strong>관심 지역</strong><small>{selected.region}</small></div></div>
@@ -393,10 +363,65 @@ export default function Home() {
               </div>
             </section>
           )}
-        </section>
+        </aside>
       </div>
 
       <footer><div><span className="brandMark">집</span><strong>집알림 실데이터 MVP</strong></div><p>국토교통부 마이홈 API · SH 공식 공고</p><p>다음 단계: 자격 기준 구조화와 Telegram Bot 연결</p></footer>
+
+      {profileOpen && (
+        <div className="dialogBackdrop" onClick={(event) => { if (event.target === event.currentTarget) setProfileOpen(false); }}>
+          <div className="profileDialog" role="dialog" aria-modal="true" aria-labelledby="profile-dialog-title">
+            <div className="panelTitle">
+              <div><p>MY PROFILE</p><h2 id="profile-dialog-title">내 조건{saveStateLabel && <small className="saveState">{saveStateLabel}</small>}</h2></div>
+              <button type="button" className="dialogClose" onClick={() => setProfileOpen(false)} aria-label="닫기">✕</button>
+            </div>
+
+            <div className="profileDialogBody">
+              <fieldset className="fieldGroup districtGroup">
+                <legend>관심 지역</legend>
+                <div className="chipGrid">
+                  {SEOUL_DISTRICTS.map((district) => (
+                    <label className={profile.districts.includes(district) ? "checked" : ""} key={district}>
+                      <input type="checkbox" checked={profile.districts.includes(district)} onChange={() => toggleDistrict(district)} />{shortDistrictName(district)}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              <div className="inputGrid">
+                <label><span>나이</span><div><input type="number" min="19" max="100" value={profile.age} onChange={(event) => updateNumber("age", event.target.value)} /><em>세</em></div></label>
+                <label><span>가구원</span><div><input type="number" min="1" max="10" value={profile.householdSize} onChange={(event) => updateNumber("householdSize", event.target.value)} /><em>명</em></div></label>
+                <label className="wide"><span>세대 월소득</span><div><input type="number" min="0" step="10" value={profile.monthlyIncome} onChange={(event) => updateNumber("monthlyIncome", event.target.value)} /><em>만원</em></div></label>
+                <label className="wide"><span>총자산</span><div><input type="number" min="0" step="100" value={profile.totalAssets} onChange={(event) => updateNumber("totalAssets", event.target.value)} /><em>만원</em></div></label>
+                <label><span>자녀 수</span><div><input type="number" min="0" max="10" value={profile.children} onChange={(event) => updateNumber("children", event.target.value)} /><em>명</em></div></label>
+                <label><span>막내 생년월일</span><div><input type="date" disabled={profile.children === 0} value={profile.youngestChildBirthDate} onChange={(event) => updateField("youngestChildBirthDate", event.target.value)} /></div></label>
+              </div>
+
+              <fieldset className="fieldGroup segmentGroup">
+                <legend>혼인 상태</legend>
+                <div className="threeWay">
+                  {(Object.keys(maritalLabels) as MaritalStatus[]).map((status) => <label className={profile.maritalStatus === status ? "checked" : ""} key={status}><input type="radio" name="maritalStatus" checked={profile.maritalStatus === status} onChange={() => updateField("maritalStatus", status)} />{maritalLabels[status]}</label>)}
+                </div>
+              </fieldset>
+
+              {profile.maritalStatus !== "single" && <div className="inputGrid profileDateField"><label className="wide"><span>{profile.maritalStatus === "married" ? "혼인신고일" : "혼인예정일"}</span><div><input type="date" value={profile.marriageDate} onChange={(event) => updateField("marriageDate", event.target.value)} /></div></label></div>}
+
+              <div className="toggleStack">
+                <label className="houseToggle"><div><strong>임신 중</strong><span>태아 포함 기준 확인용</span></div><input type="checkbox" checked={profile.isPregnant} onChange={(event) => updateField("isPregnant", event.target.checked)} /></label>
+                <label className="houseToggle"><div><strong>한부모 가구</strong><span>특별공급 대상 확인용</span></div><input type="checkbox" checked={profile.isSingleParent} onChange={(event) => updateField("isSingleParent", event.target.checked)} /></label>
+                <label className="houseToggle"><div><strong>주택 보유</strong><span>무주택 세대구성원 확인용</span></div><input type="checkbox" checked={profile.hasHouse} onChange={(event) => updateField("hasHouse", event.target.checked)} /></label>
+              </div>
+
+              <div className="privacyCard"><strong>입력값 보호</strong><p>프로필은 이 컴퓨터의 로컬 데이터베이스에만 저장하며 공식 API나 외부 서비스로 전송하지 않습니다. 알림이 브라우저를 열지 않고도 판정하기 위해 저장합니다. 소득·자산 자동판정은 상세 기준 구조화 후 연결됩니다.</p></div>
+            </div>
+
+            <div className="profileDialogFooter">
+              <button type="button" className="ghostButton" onClick={() => void loadProfile()}>되돌리기</button>
+              <button className="conditionSearchButton" type="button" onClick={searchWithProfile}>내 조건으로 공고 찾기</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {sentNotice && <div className="toast" role="status" aria-live="assertive"><span>✓</span><div><strong>텔레그램 알림 미리보기</strong><p>“{sentNotice}” 알림 전송 화면을 확인했습니다.</p></div></div>}
     </main>

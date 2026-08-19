@@ -38,8 +38,6 @@ a { color: inherit; text-decoration: none; }
 .demoBanner { min-height: 42px; padding: 8px 22px; display: flex; align-items: center; justify-content: center; gap: 12px; background: #f6df9f; color: #664b15; font-size: 12px; }
 .demoBanner strong { padding: 3px 7px; border-radius: 5px; background: #725312; color: white; font-size: 10px; }
 
-.workspace { width: min(1440px, 100%); margin: 0 auto; display: grid; grid-template-columns: 330px minmax(0, 1fr); align-items: start; }
-.profileSidebar { min-height: calc(100vh - 114px); max-height: calc(100vh - 114px); overflow-y: auto; padding: 30px 26px 40px; background: var(--white); border-right: 1px solid var(--line); position: sticky; top: 114px; }
 .panelTitle { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
 .panelTitle p, .eyebrow { margin: 0 0 3px; color: var(--green); font-size: 10px; font-weight: 900; letter-spacing: .12em; }
 .panelTitle h2 { margin: 0; font-size: 26px; letter-spacing: -.05em; }
@@ -75,97 +73,39 @@ a { color: inherit; text-decoration: none; }
 .privacyCard strong { color: var(--green); font-size: 10px; }
 .privacyCard p { margin: 4px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
 
-.dashboard { min-width: 0; padding: 48px 44px 80px; }
-.dashboardIntro { display: grid; grid-template-columns: 1fr 210px; gap: 30px; align-items: end; }
-.dashboardIntro h1 { margin: 6px 0 12px; font-size: clamp(38px, 4.4vw, 62px); line-height: 1.05; letter-spacing: -.065em; }
-.dashboardIntro h1 em { color: var(--green); font-style: normal; }
-.dashboardIntro > div > p:last-child { margin: 0; color: var(--muted); font-size: 14px; }
-.scanCard { min-height: 136px; padding: 18px; display: flex; flex-direction: column; border-radius: 16px; background: var(--green-dark); color: white; box-shadow: var(--shadow); }
-.scanCard > span { color: #93cdb7; font-size: 10px; }
-.scanCard strong { margin-top: 4px; font-size: 22px; }
-.scanCard small { color: rgba(255,255,255,.56); font-size: 10px; }
-.scanCard i { margin-top: auto; align-self: flex-start; padding: 3px 7px; border-radius: 5px; background: rgba(255,255,255,.1); color: #b7dfd0; font-size: 9px; font-style: normal; }
 
-.summaryCards { margin-top: 34px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.summaryCards button { min-height: 88px; padding: 15px 18px; display: flex; align-items: center; gap: 13px; border: 1px solid var(--line); border-radius: 14px; background: var(--white); color: var(--ink); text-align: left; transition: .18s ease; }
-.summaryCards button:hover, .summaryCards button.active { transform: translateY(-2px); border-color: #aabeb5; box-shadow: 0 10px 30px rgba(23,35,31,.07); }
-.summaryIcon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 11px; font-weight: 900; }
-.summaryIcon.success { background: var(--green-soft); color: var(--green); }
-.summaryIcon.caution { background: var(--amber-soft); color: #936417; }
-.summaryIcon.muted { background: #eceeeb; color: #6f7773; }
-.summaryCards button div { display: flex; align-items: baseline; gap: 8px; }
-.summaryCards small { color: var(--muted); font-size: 10px; }
-.summaryCards strong { font-size: 25px; }
 
-.sourceStatus { margin-top: 12px; padding: 10px 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,254,250,.72); }
-.sourceStatus a { min-height: 28px; padding: 0 9px; display: flex; align-items: center; gap: 6px; border-radius: 7px; background: white; font-size: 9px; }
-.sourceStatus a:hover { box-shadow: 0 4px 15px rgba(23,35,31,.07); }
-.sourceStatus small { color: var(--muted); }
-.sourceStatus p { width: 100%; margin: 0; color: var(--red); font-size: 9px; }
-.sourceDot { width: 6px; height: 6px; border-radius: 50%; }
-.sourceDot.ok { background: #31a373; }
-.sourceDot.fail { background: var(--red); }
 
-.recommendationBoard { margin-top: 18px; padding: 22px; border: 1px solid #c9ded4; border-radius: 17px; background: #e9f3ee; }
-.recommendationHeader { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
-.recommendationHeader p, .officialBriefHeader p { margin: 0 0 3px; color: var(--green); font-size: 9px; font-weight: 900; letter-spacing: .12em; }
-.recommendationHeader h2 { margin: 0; font-size: 21px; letter-spacing: -.04em; }
-.recommendationHeader > span { color: var(--muted); font-size: 9px; }
-.recommendationList { margin-top: 14px; display: grid; gap: 7px; }
-.recommendationList button { width: 100%; min-height: 72px; padding: 12px 14px; display: grid; grid-template-columns: 28px minmax(0, 1fr) minmax(90px, 150px); align-items: center; gap: 12px; border: 1px solid rgba(11,107,80,.14); border-radius: 11px; background: rgba(255,255,255,.8); color: var(--ink); text-align: left; }
-.recommendationList button:hover { border-color: var(--green); background: white; }
-.recommendationList button > b { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--green); color: white; font-size: 11px; }
-.recommendationList button > span { min-width: 0; display: flex; flex-direction: column; }
-.recommendationList button small { color: var(--green); font-size: 8px; font-weight: 900; }
-.recommendationList button strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.recommendationList button em { margin-top: 2px; overflow: hidden; color: var(--muted); font-size: 8px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
-.recommendationList button > i { color: var(--ink); font-size: 10px; font-style: normal; font-weight: 850; text-align: right; }
-.recommendationEmpty { padding: 18px; display: flex; flex-direction: column; border: 1px dashed #a9c7b9; border-radius: 10px; background: rgba(255,255,255,.55); }
-.recommendationEmpty span { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.officialBriefHeader p { margin: 0 0 3px; color: var(--green); font-size: 9px; font-weight: 900; letter-spacing: .12em; }
 
-.listHeader { margin-top: 44px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
-.listHeader > div:first-child { display: flex; align-items: baseline; gap: 10px; }
-.listHeader h2 { margin: 0; font-size: 24px; letter-spacing: -.04em; }
-.listHeader span { color: var(--muted); font-size: 11px; }
-.listControls { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.listControls .filters:first-child { padding-right: 8px; border-right: 1px solid var(--line); }
 .filters { display: flex; flex-wrap: wrap; gap: 5px; }
 .filters button { min-height: 31px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); font-size: 10px; }
 .filters button.active { border-color: var(--ink); background: var(--ink); color: white; }
 
-.noticeList { margin-top: 16px; display: grid; gap: 10px; }
-.noticeCard { display: grid; grid-template-columns: minmax(0, 1fr) 164px; border: 1px solid var(--line); border-radius: 16px; background: var(--white); overflow: hidden; transition: .18s ease; }
+.noticeCard { width: 100%; padding: 14px 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; border: 1px solid var(--line); border-radius: 14px; background: var(--white); color: var(--ink); text-align: left; transition: .16s ease; }
 .noticeCard:hover, .noticeCard.selected { border-color: #9bb8ab; box-shadow: 0 14px 38px rgba(27,48,39,.08); }
-.noticeCard.selected { outline: 2px solid rgba(11,107,80,.12); }
-.noticeCard.mismatch { background: #fbfbf9; }
-.noticeMain { min-width: 0; padding: 22px; }
-.noticeMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: var(--muted); font-size: 9px; }
+.noticeCard.selected { border-color: var(--green); outline: 2px solid rgba(11,107,80,.16); background: #fbfdfb; }
+.noticeCard.mismatch { opacity: .62; }
+.noticeMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; }
 .noticeMeta span:not(.agency) { padding-right: 7px; border-right: 1px solid var(--line); }
 .noticeMeta span:last-child { border-right: 0; color: #a77820; }
 .agency { min-width: 30px; padding: 3px 6px; border-radius: 5px; color: white; text-align: center; font-weight: 900; }
 .agency.sh { background: #8a4b9f; }
 .agency.lh { background: #287bb8; }
 .agency.기타 { background: #6f7773; }
-.noticeMain h3 { margin: 12px 0 6px; font-size: 18px; line-height: 1.35; letter-spacing: -.035em; }
-.noticeMain > p { margin: 0; color: var(--muted); font-size: 11px; }
-.noticeFacts { margin-top: 17px; display: flex; flex-wrap: wrap; gap: 24px; }
+.noticeFacts { display: flex; flex-wrap: wrap; gap: 18px; }
 .noticeFacts > span { display: flex; flex-direction: column; }
-.noticeFacts small { color: #929994; font-size: 8px; }
-.noticeFacts strong { margin-top: 2px; font-size: 11px; }
-.matchPanel { padding: 20px 17px; display: flex; flex-direction: column; align-items: stretch; border-left: 1px solid var(--line); background: #fafbf7; }
+.noticeFacts small { color: #929994; font-size: 10px; }
+.noticeFacts strong { margin-top: 2px; font-size: 12px; }
 .statusGroup { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
-.fitPill { padding: 4px 7px; border-radius: 6px; font-size: 8px; font-weight: 900; }
+.fitPill { padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: 900; }
 .fitPill.likely { background: var(--green-soft); color: var(--green); }
 .fitPill.review { background: var(--amber-soft); color: #8b6018; }
 .fitPill.mismatch { background: var(--red-soft); color: var(--red); }
-.statusPill { align-self: flex-start; padding: 4px 7px; border-radius: 6px; font-size: 8px; font-weight: 900; }
+.statusPill { align-self: flex-start; padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: 900; }
 .statusPill.eligible { background: var(--green-soft); color: var(--green); }
 .statusPill.review { background: var(--amber-soft); color: #8b6018; }
 .statusPill.unlikely { background: var(--red-soft); color: var(--red); }
-.matchPanel button { margin-top: auto; min-height: 31px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--ink); font-size: 9px; font-weight: 800; }
-.sourceStamp { margin: 15px 0; display: flex; flex-direction: column; }
-.sourceStamp strong { font-size: 24px; letter-spacing: -.04em; }
-.sourceStamp small { color: var(--muted); font-size: 9px; }
 .emptyState { padding: 52px; border: 1px dashed #b9c1bc; border-radius: 16px; text-align: center; }
 .emptyState p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
 .emptyState button { min-height: 34px; margin-top: 14px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--ink); color: white; font-size: 10px; font-weight: 800; }
@@ -232,9 +172,6 @@ footer p { margin: 0; color: rgba(255,255,255,.5); font-size: 10px; }
 @keyframes toast-in { from { transform: translateY(14px); opacity: 0; } }
 
 @media (max-width: 1080px) {
-  .workspace { grid-template-columns: 290px minmax(0, 1fr); }
-  .profileSidebar { padding-left: 20px; padding-right: 20px; }
-  .dashboard { padding-left: 28px; padding-right: 28px; }
   .detailGrid { grid-template-columns: 1fr; }
   .decisionStrip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .decisionStrip > div:nth-child(2) { border-right: 0; }
@@ -244,13 +181,8 @@ footer p { margin: 0; color: rgba(255,255,255,.5); font-size: 10px; }
 
 @media (max-width: 820px) {
   .appHeader { position: static; }
-  .workspace { display: block; }
-  .profileSidebar { min-height: 0; max-height: none; overflow: visible; position: static; border-right: 0; border-bottom: 1px solid var(--line); }
   .inputGrid { grid-template-columns: repeat(4, 1fr); }
   .inputGrid label.wide { grid-column: span 2; }
-  .profileSidebar .privacyCard { display: none; }
-  .dashboardIntro { grid-template-columns: 1fr; }
-  .scanCard { min-height: 112px; max-width: 260px; }
 }
 
 @media (max-width: 640px) {
@@ -258,23 +190,11 @@ footer p { margin: 0; color: rgba(255,255,255,.5); font-size: 10px; }
   .headerStatus { display: none; }
   .telegramButton { margin-left: auto; }
   .demoBanner { align-items: flex-start; justify-content: flex-start; font-size: 10px; }
-  .profileSidebar { padding: 24px 16px; }
   .inputGrid { grid-template-columns: 1fr 1fr; }
   .inputGrid label.wide { grid-column: 1 / -1; }
-  .dashboard { padding: 36px 14px 60px; }
-  .dashboardIntro h1 { font-size: 40px; }
-  .summaryCards { grid-template-columns: 1fr; }
-  .summaryCards button { min-height: 66px; }
-  .listHeader { align-items: flex-start; flex-direction: column; }
-  .listControls { width: 100%; justify-content: flex-start; }
-  .recommendationHeader { align-items: flex-start; flex-direction: column; gap: 5px; }
-  .recommendationList button { grid-template-columns: 28px minmax(0, 1fr); }
-  .recommendationList button > i { grid-column: 2; text-align: left; }
   .filters { width: 100%; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 3px; }
   .filters button { flex: 0 0 auto; }
   .noticeCard { grid-template-columns: 1fr; }
-  .matchPanel { border-left: 0; border-top: 1px solid var(--line); }
-  .matchPanel button { min-height: 36px; margin-top: 13px; }
   .noticeFacts { gap: 14px; }
   .detailPanel { padding: 20px; }
   .detailHeader { align-items: flex-start; flex-direction: column; }
@@ -285,6 +205,74 @@ footer p { margin: 0; color: rgba(255,255,255,.5); font-size: 10px; }
   footer { align-items: flex-start; flex-direction: column; gap: 7px; }
   footer > div { margin-bottom: 7px; }
   .toast { left: 14px; right: 14px; bottom: 14px; }
+}
+
+/* ── 헤더 프로필 버튼 ─────────────────────────────────────── */
+.profileButton { padding: 6px 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; border: 1px solid var(--line); border-radius: 10px; background: var(--white); color: var(--ink); }
+.profileButton small { color: var(--muted); font-size: 9px; font-weight: 900; letter-spacing: .1em; }
+.profileButton strong { font-size: 12px; font-weight: 850; }
+.profileButton:hover { border-color: #9bb8ab; box-shadow: 0 4px 14px rgba(23,35,31,.08); }
+
+/* ── 한 줄 요약바 ─────────────────────────────────────────── */
+.summaryBar { width: min(1440px, 100%); margin: 0 auto; padding: 18px 22px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 26px; border-bottom: 1px solid var(--line); }
+.summaryCount { min-width: 0; }
+.summaryCount h1 { margin: 3px 0 0; font-size: 21px; line-height: 1.3; letter-spacing: -.02em; font-weight: 850; }
+.summaryCount h1 em { color: var(--green); font-style: normal; font-weight: 900; }
+.summaryFilters { display: flex; flex-wrap: wrap; gap: 8px; }
+.summaryMeta { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; }
+.summaryMeta span { font-size: 12px; font-weight: 800; }
+.summaryMeta small { color: var(--muted); font-size: 10px; }
+.summaryError { width: min(1440px, 100%); margin: 0 auto; padding: 10px 22px 0; color: var(--red); font-size: 12px; font-weight: 700; }
+
+/* ── 2단 구성: 목록 + 상세 ────────────────────────────────── */
+.browser { width: min(1440px, 100%); margin: 0 auto; padding: 20px 22px 72px; display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.noticeColumn { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+/* 목록을 스크롤해도 상세가 화면에 남아야 한다. 선택 반응이 보이지 않는 것이
+   이 화면에서 가장 불편한 부분이었다. */
+.detailColumn { min-width: 0; position: sticky; top: 88px; max-height: calc(100vh - 108px); overflow-y: auto; }
+
+.listDivider { margin: 8px 0 0; color: var(--green); font-size: 10px; font-weight: 900; letter-spacing: .1em; }
+.noticeCard h3 { margin: 0; font-size: 14px; line-height: 1.45; font-weight: 850; }
+.noticeCard > p { margin: 0; color: var(--muted); font-size: 12px; }
+.recommendBadge { padding: 3px 7px; border-radius: 6px; background: var(--green); color: white; font-size: 10px; font-weight: 900; }
+.noticeMeta .recommendBadge { border-right: 0; padding-right: 7px; }
+
+.detailEmpty { padding: 56px 28px; display: flex; flex-direction: column; gap: 6px; border: 1px dashed #b9c1bc; border-radius: 16px; background: rgba(255,254,250,.6); text-align: center; }
+.detailEmpty strong { font-size: 14px; }
+.detailEmpty p { margin: 0; color: var(--muted); font-size: 12px; }
+
+/* ── 내 조건 팝업 ─────────────────────────────────────────── */
+.dialogBackdrop { position: fixed; inset: 0; z-index: 60; padding: 24px; display: grid; place-items: center; background: rgba(17,26,22,.44); animation: dialog-in .14s ease-out; }
+.profileDialog { width: min(560px, 100%); max-height: min(86vh, 900px); display: flex; flex-direction: column; overflow: hidden; border-radius: 18px; background: var(--paper); box-shadow: 0 30px 80px rgba(0,0,0,.32); }
+.profileDialog .panelTitle { padding: 18px 22px 14px; margin: 0; border-bottom: 1px solid var(--line); background: var(--white); }
+.profileDialogBody { padding: 18px 22px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
+.profileDialogFooter { padding: 14px 22px; display: flex; gap: 10px; border-top: 1px solid var(--line); background: var(--white); }
+.profileDialogFooter .conditionSearchButton { flex: 1; margin-top: 0; }
+.ghostButton { min-height: 44px; padding: 0 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--white); color: var(--ink); font-size: 12px; font-weight: 800; }
+.dialogClose { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--white); color: var(--ink); font-size: 12px; }
+@keyframes dialog-in { from { opacity: 0 } to { opacity: 1 } }
+
+/* 좁은 화면에서는 2단을 유지할 수 없다. 상세를 목록 아래로 내리고,
+   공고를 누르면 상세로 스크롤한다(page.tsx의 selectNotice). */
+.sheetClose { display: none; }
+
+/* 2단이 유지되지 않는 폭에서는 상세를 목록 아래로 내리지 않고 덮어서 띄운다.
+   목록 20장 아래에 두면 눌러도 반응이 보이지 않는다. */
+/* 720px까지 2단을 유지한다. 디스플레이 배율이나 브라우저 줌 때문에 창이
+   1440px이어도 CSS 폭은 그보다 작아지므로, 기준을 낮게 잡아야 옆에 뜬다. */
+@media (max-width: 719px) {
+  .browser { grid-template-columns: minmax(0, 1fr); }
+  .detailColumn { position: static; max-height: none; overflow: visible; }
+  .detailColumn.asSheet { position: fixed; inset: 0; z-index: 70; padding: 14px; overflow-y: auto; background: var(--paper); }
+  .detailColumn.asSheet .sheetClose { position: sticky; top: 0; z-index: 1; width: 100%; min-height: 42px; margin-bottom: 12px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 10px; background: var(--white); color: var(--ink); font-size: 12px; font-weight: 800; }
+}
+
+@media (max-width: 640px) {
+  .summaryBar { padding: 14px 14px; gap: 12px; }
+  .summaryMeta { margin-left: 0; align-items: flex-start; }
+  .browser { padding: 14px 14px 48px; }
+  .profileButton { padding: 5px 10px; }
+  .profileButton strong { font-size: 11px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
