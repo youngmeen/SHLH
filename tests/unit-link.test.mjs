@@ -121,3 +121,21 @@ test("단지명에서 공급유형 낱말을 떼어낸다", () => {
   // 단지에 붙을 수 있다.
   assert.deepEqual(splitComplexName("소셜믹스형 청년주택"), { base: "소셜믹스형 청년주택", type: null });
 });
+
+test("공급유형을 알고 있으면 단지명에서 추측하지 않는다", () => {
+  // 마이홈 모집공고는 단지명(`서울번동3`)과 공급유형(`행복주택`)을 따로 준다.
+  // 이름에서 유형을 추측할 필요가 없고, 추측하지 않으면 유형 확인을 놓친다.
+  const result = linkInventoryUnits("서울번동3", 번동3_재고, { type: "행복주택" });
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.typeMatched, true);
+  assert.ok(result.units.every((unit) => unit.supplyType === "행복주택"));
+  assert.equal(result.units.length, 2);
+});
+
+test("알려준 유형이 재고에 없으면 잇지 않는다", () => {
+  const result = linkInventoryUnits("서울번동3", 번동3_재고, { type: "국민임대" });
+
+  assert.equal(result.status, "unmatched");
+  assert.equal(result.reason, "type-mismatch");
+});

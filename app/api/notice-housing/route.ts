@@ -1,5 +1,11 @@
-import { readDistrictInventory, readInventoryFetchedAt, readNoticeBySource, readNoticeUnits } from "../../lib/sync-store.ts";
-import { linkInventoryUnits } from "../../lib/unit-link.ts";
+import {
+  readDistrictInventory,
+  readInventoryByName,
+  readInventoryFetchedAt,
+  readNoticeBySource,
+  readNoticeUnits,
+} from "../../lib/sync-store.ts";
+import { linkInventoryUnits, splitComplexName } from "../../lib/unit-link.ts";
 import { SEOUL_DISTRICTS, type District } from "../../lib/notice-types.ts";
 
 /**
@@ -66,21 +72,34 @@ export async function GET(request: Request) {
       }),
     );
 
-    const allInventoryUnits = inventory.flatMap((entry) => entry.units);
-    const withLinks = units.map((unit) => {
-      if (!unit.complexName) return { unit, link: { status: "unmatched", reason: "name-too-weak", units: [] } };
-      const link = linkInventoryUnits(unit.complexName, allInventoryUnits);
-      return {
-        unit,
-        link: {
-          status: link.status,
-          reason: link.reason,
-          typeMatched: link.status === "matched" ? link.typeMatched : false,
-          // 재고에서 확인된 전용면적·주소·PNU. 잇지 못했으면 빈 배열이다.
-          units: link.units,
-        },
-      };
-    });
+    // 조인은 화면에 보여줄 재고 목록(잘려 있다)이 아니라 이름으로 좁힌 후보 전체와
+    // 맞춘다. 잘린 목록으로 맞추면 뒤에 있는 주택을 놓친다.
+    const withLinks = await Promise.all(
+      units.map(async (unit) => {
+        if (!unit.complexName) {
+          return { unit, link: { status: "unmatched", reason: "name-too-weak", typeMatched: false, units: [] } };
+        }
+
+        const { base } = splitComplexName(unit.complexName);
+        const searchDistricts = unit.sigungu ? [unit.sigungu] : districts.slice(0, MAX_INVENTORY_DISTRICTS);
+        const candidates = (
+          await Promise.all(searchDistricts.map((district) => readInventoryByName(district, base)))
+        ).flat();
+
+        // 마이홈 모집공고는 공급유형을 따로 준다. 이름에서 추측하지 않는다.
+        const link = linkInventoryUnits(unit.complexName, candidates, { type: unit.supplyType });
+        return {
+          unit,
+          link: {
+            status: link.status,
+            reason: link.reason,
+            typeMatched: link.status === "matched" ? link.typeMatched : false,
+            // 재고에서 확인된 전용면적·주소·PNU. 잇지 못했으면 빈 배열이다.
+            units: link.units,
+          },
+        };
+      }),
+    );
 
     return Response.json(
       {

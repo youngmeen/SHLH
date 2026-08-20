@@ -321,3 +321,30 @@ export async function readInventoryFetchedAt(district: string, db = getDb()) {
     .where(and(eq(housingUnit.source, "myhome-complex"), eq(housingUnit.sigungu, district)));
   return { fetchedAt: row?.fetchedAt ?? null, count: Number(row?.count ?? 0) };
 }
+
+/**
+ * 이름으로 재고 후보를 좁혀서 읽는다.
+ *
+ * 자치구 재고가 최대 5,025행이라 앞의 몇 백 행만 읽어 비교하면 **뒤에 있는 주택을
+ * 못 찾는다.** 실제로 `서울번동3` 조인에서 44.68㎡ 한 행이 그렇게 빠졌다. 이름
+ * 조건을 DB에 넘겨 후보만 가져온 뒤 정확한 판단은 unit-link가 한다.
+ */
+export async function readInventoryByName(district: string, base: string, db = getDb()) {
+  // 공백·괄호·가운뎃점을 지우고 비교한다. unit-link의 normalize와 같은 기준이다.
+  const needle = base.replace(/[\s·・()（）[\]]/g, "").toLowerCase();
+  if (needle.length < 3) return [];
+  // LIKE 메타문자는 이름의 일부로 취급한다.
+  const pattern = `%${needle.replace(/([%_\\])/g, "\\$1")}%`;
+
+  return db
+    .select()
+    .from(housingUnit)
+    .where(
+      and(
+        eq(housingUnit.source, "myhome-complex"),
+        eq(housingUnit.sigungu, district),
+        sql`lower(translate(${housingUnit.complexName}, ' ·・()（）[]', '')) like ${pattern}`,
+      ),
+    )
+    .limit(500);
+}

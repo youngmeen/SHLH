@@ -173,37 +173,91 @@ function endDateInheritingYear(start: string, month: string, day: string) {
   return candidate >= start ? candidate : `${year + 1}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 }
 
+/** 한 줄에서 읽어낸 접수 구간. */
+type ApplyRange = { start: string; end: string | null; deadlineAt: string | null };
+
+function timeSuffix(end: string, tail: string) {
+  // 마감 시각은 마감일 뒤에 붙는다 — `2026.09.17.(목) 18시`, `~ 17:00`. 마지막 것을 쓴다.
+  const times = [...tail.matchAll(/(\d{1,2})\s*(?:시|:\s*(\d{2}))/g)];
+  const last = times.at(-1);
+  return last ? `${end}T${last[1].padStart(2, "0")}:${(last[2] ?? "00").padStart(2, "0")}:00+09:00` : null;
+}
+
+/**
+ * 접수 한 줄을 구간으로 읽는다. 실측한 세 가지 표기를 모두 다룬다.
+ *  1. 날짜 두 개            `2026.08.19. ~ 2026.09.17. 18시`
+ *  2. 마감일에 연도 없음    `2026.08.18. ~ 08.28. 18:00`
+ *  3. 같은 날 시각 범위     `2026. 8. 20.(목) 10:00 ~ 17:00`
+ * 대괄호 안의 소인·도착 날짜는 세 번째 이후 날짜라 자연히 빠진다.
+ */
+function rangeFromLine(line: string): ApplyRange | null {
+  const dates = [...line.matchAll(new RegExp(DATE_PATTERN, "g"))];
+  if (dates.length === 0) return null;
+
+  const start = toIsoDate(dates[0][0]);
+  if (!start) return null;
+
+  if (dates.length >= 2) {
+    const end = toIsoDate(dates[1][0]);
+    const tail = line.slice((dates[1].index ?? 0) + dates[1][0].length);
+    return { start, end, deadlineAt: end ? timeSuffix(end, tail) : null };
+  }
+
+  const afterStart = line.slice((dates[0].index ?? 0) + dates[0][0].length);
+  const partial = afterStart.match(/[~∼]\s*(\d{1,2})\s*[.\-/]\s*(\d{1,2})/);
+  if (partial) {
+    const end = endDateInheritingYear(start, partial[1], partial[2]);
+    return { start, end, deadlineAt: timeSuffix(end, afterStart.slice((partial.index ?? 0) + partial[0].length)) };
+  }
+
+  // 같은 날 안에서 시각만 나뉜 경우. 마감일은 시작일과 같다.
+  if (/[~∼]\s*\d{1,2}\s*(?:시|:\d{2})/.test(afterStart)) {
+    return { start, end: start, deadlineAt: timeSuffix(start, afterStart) };
+  }
+
+  // 마감을 모르면 만들지 않는다(R44).
+  return null;
+}
+
+// 항목 아래 세부 줄. 순위·접수방법별 날짜가 여기에 있다.
+const CONTINUATION = /^[-–—]/;
+// 접수가 아닌 일정. 이 낱말이 있으면 접수기간으로 읽지 않는다.
+const NOT_APPLY = /제출|발표|심사|계약|추첨|당첨|공개/;
+
+/**
+ * 접수기간. 여러 줄에 흩어져 있으면 **가장 이른 시작 ~ 가장 늦은 마감**으로 모은다.
+ *
+ * 실측에서 한 공고가 인터넷 1순위(8.18~8.19), 2순위(8.20 당일), 우편(8.13~8.14)으로
+ * 나뉘어 있었다. 어느 순위로 신청하든 이 창 안이므로 합쳐야 실제 접수 가능 기간이 된다.
+ * 각 구간은 공고문이 적은 값이고, 합치는 것만 우리 계산이다.
+ */
 function parseApplyPeriod(lines: string[]) {
+  const ranges: ApplyRange[] = [];
+  let inSection = false;
+
   for (const line of lines) {
-    if (!APPLY_LINE.test(line)) continue;
-    const dates = [...line.matchAll(new RegExp(DATE_PATTERN, "g"))];
-    if (dates.length === 0) continue; // `■ 접수일`처럼 제목만 있는 줄. 다음 줄에 날짜가 온다
+    const isMarker = SECTION_MARKER.test(line);
+    const isContinuation = CONTINUATION.test(line);
 
-    const start = toIsoDate(dates[0][0]);
-    if (!start) continue;
-
-    let end: string | null = null;
-    let tail = "";
-    if (dates.length >= 2) {
-      end = toIsoDate(dates[1][0]);
-      // 마감 시각은 마감일 뒤에 붙는다 — `2026.09.17.(목) 18시`.
-      tail = line.slice((dates[1].index ?? 0) + dates[1][0].length);
-    } else {
-      const afterStart = line.slice((dates[0].index ?? 0) + dates[0][0].length);
-      const partial = afterStart.match(/[~∼-]\s*(\d{1,2})\s*[.\-/]\s*(\d{1,2})/);
-      // 마감일이 없으면 만들지 않는다. 시작만 알고 마감을 짐작하면 R44 위반이다.
-      if (!partial) continue;
-      end = endDateInheritingYear(start, partial[1], partial[2]);
-      tail = afterStart.slice((partial.index ?? 0) + partial[0].length);
+    if (isMarker) {
+      if (APPLY_LINE.test(line) && !NOT_APPLY.test(line)) inSection = true;
+      // 다른 대항목(`■`)이 시작되면 접수 구간은 끝난다. `○` 세부는 구간을 유지한다.
+      else if (/^[■□▣]/.test(line)) inSection = false;
     }
 
-    const hour = tail.match(/(\d{1,2})\s*(?:시|:\s*(\d{2}))/);
-    const deadlineAt =
-      end && hour ? `${end}T${hour[1].padStart(2, "0")}:${(hour[2] ?? "00").padStart(2, "0")}:00+09:00` : null;
+    if (!inSection) continue;
+    if (!isMarker && !isContinuation) continue; // 안내문·주의문(`★`·`※`)은 항목이 아니다
+    if (NOT_APPLY.test(line)) continue;
 
-    return { start, end, deadlineAt };
+    const range = rangeFromLine(line);
+    if (range?.end) ranges.push(range);
   }
-  return { start: null, end: null, deadlineAt: null };
+
+  if (ranges.length === 0) return { start: null, end: null, deadlineAt: null };
+
+  const start = ranges.reduce((min, range) => (range.start < min ? range.start : min), ranges[0].start);
+  const latest = ranges.reduce((last, range) => ((range.end as string) > (last.end as string) ? range : last), ranges[0]);
+  return { start, end: latest.end, deadlineAt: latest.deadlineAt };
 }
 
 function valueAfterLabel(lines: string[], pattern: RegExp) {
@@ -222,9 +276,12 @@ export function parsePortalDetail(html: string): PortalDetail {
 
   // `상세 정보` 아래가 본문이다. 항목이 줄 단위라 줄을 살려서 읽는다.
   const bodyStart = block.search(/상세\s*정보/);
-  const lines = bodyStart < 0 ? [] : sectionLines(htmlToLines(block.slice(bodyStart)));
+  const allLines = bodyStart < 0 ? [] : htmlToLines(block.slice(bodyStart));
+  // 발표일·공급호수는 항목 줄만 본다(앞머리 안내문이 같은 낱말을 쓴다). 접수기간은
+  // 항목 아래 세부 줄에 날짜가 있어서 전체 줄을 넘긴다.
+  const lines = sectionLines(allLines);
 
-  const apply = parseApplyPeriod(lines);
+  const apply = parseApplyPeriod(allLines);
   // `서류심사대상자 발표`를 당첨자 발표로 읽으면 안 된다. 당첨자만, 날짜가 있는 줄만 본다.
   const announceLine = lines.find((line) => /당첨자\s*발표/.test(line) && DATE_PATTERN.test(line)) ?? null;
 
@@ -252,10 +309,25 @@ async function fetchOfficialHtml(url: string) {
   return response.text();
 }
 
-// 한 페이지에 10행이다(실측). 접수 중인 공고는 앞쪽에 모여 있으므로 3페이지면 덮는다.
+// 한 페이지에 10행이다(실측). 목록 전체가 8페이지 80행인데 게시판 공고와 겹치는 것은
+// 앞 2페이지에만 있었다(cp=3~8은 겹침 0). 3페이지면 덮는다.
 const PORTAL_PAGE_COUNT = 3;
-// 상세는 행마다 한 번 더 요청한다. 우리가 저장한 공고와 겹치는 것만, 그리고 상한을 둔다.
-const PORTAL_DETAIL_LIMIT = 12;
+// 상세는 행마다 요청을 하나 더 쓴다. 겹치는 행이 실측 14건이라 그보다 넉넉하게 둔다.
+// 12로 두었을 때 모집마감 공고가 먼저 소비돼 모집중 공고의 접수기간이 비었다.
+const PORTAL_DETAIL_LIMIT = 20;
+
+/**
+ * 상세를 읽을 순서. 상한에 걸려도 지금 지원할 수 있는 공고가 먼저 채워져야 한다.
+ * `모집중` → 상태 미확인 → 그 밖, 같은 묶음 안에서는 최근 공고 먼저.
+ */
+export function orderDetailTargets<T extends { shSeq: string | null; portalSeq: string | null; status: string | null; publishedAt: string | null }>(
+  rows: T[],
+) {
+  const rank = (status: string | null) => (status === "모집중" ? 0 : status === null ? 1 : 2);
+  return rows
+    .filter((row) => row.shSeq && row.portalSeq)
+    .sort((a, b) => rank(a.status) - rank(b.status) || (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""));
+}
 
 /**
  * 목록을 읽고, 우리가 아는 SH 공고와 겹치는 행만 상세까지 따라간다.
@@ -275,17 +347,22 @@ export async function collectPortalSupplements(
   );
 
   const supplements = new Map<string, PortalSupplement>();
-  const pending: { row: PortalListRow; page: number }[] = [];
+  const candidates: { row: PortalListRow; page: number }[] = [];
 
   pages.forEach((html, index) => {
     for (const row of parsePortalList(html)) {
       if (!row.shSeq || supplements.has(row.shSeq)) continue;
       supplements.set(row.shSeq, { ...row, detail: null, detailUrl: null });
-      if (wanted.has(row.shSeq) && row.portalSeq) pending.push({ row, page: index + 1 });
+      if (wanted.has(row.shSeq)) candidates.push({ row, page: index + 1 });
     }
   });
 
-  for (const { row, page } of pending.slice(0, detailLimit)) {
+  const pageOf = new Map(candidates.map(({ row, page }) => [row.shSeq as string, page]));
+  const pending = orderDetailTargets(candidates.map(({ row }) => row))
+    .slice(0, detailLimit)
+    .map((row) => ({ row, page: pageOf.get(row.shSeq as string) ?? 1 }));
+
+  for (const { row, page } of pending) {
     const url = portalDetailUrl(row.portalSeq as string, page);
     const entry = supplements.get(row.shSeq as string);
     if (!entry) continue;

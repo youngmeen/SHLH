@@ -38,8 +38,8 @@
 
 아직 없는 것
 
-- 저장소 연결 확인 — `.env.local`에 `DATABASE_URL`을 넣고 `npm run db:migrate`를 실행해야 저장이 시작됩니다
 - 자동 동기화 등록 — `scripts/com.jib-alim.sync.plist`를 `launchctl`로 걸어야 09:00·18:00에 돕니다
+- 포털에 없는 SH 공고(특화형 매입임대·사회주택 계열)의 접수기간 — 게시판 본문이나 첨부에만 있습니다
 - 소득·자산·청약통장 기반 자격 판정 (Phase 3)
 - 출퇴근 시간 판단, 경기도 공고 (Phase 4)
 - 전세임대 전용 정보 (Phase 5), 과거 경쟁률 (Phase 6), 추천 (Phase 7)
@@ -69,6 +69,8 @@ npm run dev
 DATA_GO_KR_API_KEY=공공데이터포털_일반인증키
 DATABASE_URL=Supabase_Postgres_접속문자열
 ```
+
+접속 문자열은 대시보드의 **Connection pooling**(Session mode, 5432)을 씁니다. 직접 연결(`db.<ref>.supabase.co`)은 IPv6 전용이라 IPv4 회선에서는 `ENOTFOUND`가 납니다. 사용자 이름이 `postgres.<project-ref>` 형식인지 확인하세요.
 
 다른 컴퓨터로 옮길 때 Git을 쓰지 않는다면 `node_modules`, `.next`, `.env.local`을 제외하고 새로 만듭니다. 데이터는 Supabase에 있으므로 함께 옮길 필요가 없습니다.
 

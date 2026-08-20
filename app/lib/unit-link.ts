@@ -87,8 +87,15 @@ const UNMATCHED = (reason: LinkReason): InventoryLink<never> => ({
  * @param complexName 공고가 말하는 단지명 (유형이 붙어 있어도 된다)
  * @param inventory   그 자치구의 재고 행
  */
-export function linkInventoryUnits<T extends LinkableUnit>(complexName: string, inventory: T[]): InventoryLink<T> {
-  const { base, type } = splitComplexName(complexName ?? "");
+export function linkInventoryUnits<T extends LinkableUnit>(
+  complexName: string,
+  inventory: T[],
+  options: { type?: string | null } = {},
+): InventoryLink<T> {
+  const parsed = splitComplexName(complexName ?? "");
+  // 출처가 공급유형을 따로 주면(마이홈 모집공고의 suplyTyNm) 이름에서 추측하지 않는다.
+  const base = parsed.base;
+  const type = options.type?.trim() || parsed.type;
   const needle = normalize(base);
   if (isWeakName(needle)) return UNMATCHED("name-too-weak");
 

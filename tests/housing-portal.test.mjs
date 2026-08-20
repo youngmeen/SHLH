@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parsePortalDetail, parsePortalList, portalDetailUrl } from "../app/lib/housing-portal.ts";
+import { orderDetailTargets, parsePortalDetail, parsePortalList, portalDetailUrl } from "../app/lib/housing-portal.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 픽스처는 2026-08-20에 실제로 받은 응답 구조를 그대로 따른다.
@@ -234,4 +234,70 @@ test("마감일이 아예 없으면 접수기간을 만들지 않는다", () => 
   // 시작만 알고 마감을 모르면 마감을 만들지 않는다(R44). 원문을 봐야 한다.
   assert.equal(detail.applyEnd, null);
   assert.equal(detail.applyDeadlineAt, null);
+});
+
+// 상세는 행마다 요청을 하나 더 쓴다. 상한에 걸리면 무엇을 먼저 읽을지가 결과를 가른다.
+// 실측에서 붙은 14건 중 12건만 읽어 `모집마감` 공고가 먼저 소비된 일이 있었다.
+test("상세는 모집중인 공고를 먼저 읽는다", () => {
+  const rows = [
+    { shSeq: "1", portalSeq: "1", status: "모집마감", publishedAt: "2026-08-19", title: "마감된 공고" },
+    { shSeq: "2", portalSeq: "2", status: "모집중", publishedAt: "2026-06-01", title: "오래된 모집중 공고" },
+    { shSeq: "3", portalSeq: "3", status: null, publishedAt: "2026-08-20", title: "상태 미확인" },
+    { shSeq: "4", portalSeq: "4", status: "모집중", publishedAt: "2026-08-18", title: "최근 모집중 공고" },
+  ];
+
+  assert.deepEqual(orderDetailTargets(rows).map((row) => row.shSeq), ["4", "2", "3", "1"]);
+});
+
+test("상세를 따라갈 수 없는 행은 후보에서 뺀다", () => {
+  const rows = [
+    { shSeq: "1", portalSeq: null, status: "모집중", publishedAt: "2026-08-19", title: "행 번호를 모른다" },
+    { shSeq: null, portalSeq: "2", status: "모집중", publishedAt: "2026-08-19", title: "붙일 게시판 공고가 없다" },
+    { shSeq: "3", portalSeq: "3", status: "모집중", publishedAt: "2026-08-19", title: "정상" },
+  ];
+
+  assert.deepEqual(orderDetailTargets(rows).map((row) => row.shSeq), ["3"]);
+});
+
+// 실측(1~2인가구 도시형생활주택 잔여세대): `■ 접수일` 아래 순위별 `- …` 줄에 날짜가 있다.
+// 항목 줄만 보면 접수기간이 통째로 비고, 실제로 모집중 공고가 그렇게 비어 있었다.
+const 순위별_상세 = 상세_HTML(
+  `<p>■ 신청자격: 입주자모집공고일(26. 8. 5.) 현재 서울특별시의 주민등록표에 등재된 1인가구 또는 2인가구 무주택세대구성원</p>` +
+    `<p> ○ 단지 및 공급기준에 따라 추가 자격이 있으므로 자세한 내용은 공고문을 반드시 참고 </p><br/>` +
+    `<p>■ 접수일</p><p> ○ 인터넷접수</p>` +
+    `<p><span>   - 일반공급 1순위(소득 50%이하), 우선공급 1,2순위(소득 70%이하): 2026. 8. 18.(화) 10:00 ~ 2026. 8. 19.(수) 17:00</span></p>` +
+    `<p><span>   - 일반공급 2순위(소득 70%이하), 주거약자 2순위(소득 70%이하) : 2026. 8. 20.(목) 10:00 ~ 17:00</span></p>` +
+    `<p><span>   ※ 일반공급 1순위가 공급세대의 8배수를 초과할 경우 2순위는 신청접수 받지 않습니다. </span></p>` +
+    `<p> ○ 우편접수 </p>` +
+    `<p>   - 우편접수 기간: 2026. 8. 13.(목) ~ 2026. 8. 14.(금) [8. 14.(금) 소인분, 8. 18.(화) 도착분까지 유효]</p>` +
+    `<p>■ 서류심사대상자 발표: 2026. 8. 31.(월)</p>` +
+    `<p>■ 심사대상자 서류제출기간:  2026. 9. 2.(수) ~ 2026. 9. 4.(금)</p>` +
+    `<p>■ 당첨자발표: 2026. 11. 20.(금)</p>`,
+  { title: "2026년 1~2인가구를 위한 도시형생활주택(건설형원룸) 잔여세대 입주자 모집공고", published: "2026-08-05", type: "도시형생활주택", department: "맞춤주택공급부" },
+);
+
+test("순위·접수방법별로 나뉜 접수기간을 하나로 모은다", () => {
+  const detail = parsePortalDetail(순위별_상세);
+
+  // 우편 8.13 ~ 2순위 8.20. 어느 순위로 신청하든 이 창 안이다.
+  assert.equal(detail.applyStart, "2026-08-13");
+  assert.equal(detail.applyEnd, "2026-08-20");
+  assert.equal(detail.applyDeadlineAt, "2026-08-20T17:00:00+09:00", "마지막 접수일의 마감 시각");
+});
+
+test("서류제출기간·서류심사 발표를 접수기간으로 읽지 않는다", () => {
+  const detail = parsePortalDetail(순위별_상세);
+
+  assert.notEqual(detail.applyEnd, "2026-09-04", "서류제출기간이 접수기간이 되면 안 된다");
+  assert.equal(detail.announceAt, "2026-11-20", "서류심사 발표일이 아니라 당첨자 발표일이다");
+});
+
+test("대괄호 안의 소인·도착 날짜는 접수기간을 늘리지 않는다", () => {
+  const 우편만_상세 = 상세_HTML(
+    `<p>■ 접수일</p><p> ○ 우편접수 </p>` +
+      `<p>   - 우편접수 기간: 2026. 8. 13.(목) ~ 2026. 8. 14.(금) [8. 14.(금) 소인분, 8. 18.(화) 도착분까지 유효]</p>`,
+    { title: "우편접수 공고", published: "2026-08-05", type: "매입임대주택", department: "맞춤주택공급부" },
+  );
+
+  assert.equal(parsePortalDetail(우편만_상세).applyEnd, "2026-08-14");
 });
