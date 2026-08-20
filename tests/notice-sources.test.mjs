@@ -117,3 +117,13 @@ test("여러 페이지의 모집공고를 합치고 같은 공고는 한 번만 
   const notices = mergeShPages([first, second]);
   assert.deepEqual(notices.map((notice) => notice.id), ["SH-701", "SH-703"]);
 });
+
+test("화면 목록에서도 게시판 뱃지를 떼어낸다", () => {
+  // 저장용 추출만 고치고 화면용 목록을 빼놓아 `NEW …`가 화면에 그대로 보였다(G6).
+  // 제목으로 자치구와 모집 여부를 판단하므로 뱃지가 남으면 판별도 흔들린다.
+  const notices = parseShNotices(shPage(shRow(400, "NEW 강북구 국민임대주택 입주자 모집공고")));
+
+  assert.equal(notices.length, 1);
+  assert.equal(notices[0].title, "강북구 국민임대주택 입주자 모집공고");
+  assert.deepEqual(notices[0].districts, ["강북구"]);
+});

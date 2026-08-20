@@ -166,7 +166,9 @@ export function parseShNotices(html: string): PublicNotice[] {
     const cells = extractCells(row);
     if (cells.length < 4) continue;
 
-    const title = cells[1];
+    // 게시판이 붙인 뱃지(`NEW …`)를 먼저 떼어낸다. 제목으로 자치구와 모집 여부를
+    // 판단하므로 남기면 판별과 표시가 함께 흔들린다(G6).
+    const title = cleanBoardTitle(cells[1] ?? "");
     const scope = classifySeoulScope(title);
     if (!isRecruitmentPost(title) || !scope) continue;
 
