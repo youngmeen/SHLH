@@ -1,4 +1,4 @@
-import type { NoticeFeed } from "./notice-types";
+import { SEOUL_DISTRICTS, type NoticeFeed } from "./notice-types.ts";
 
 // 2026-08-19 공식 소스 정상 응답으로 생성한 최초 표시용 스냅샷입니다.
 // 화면 로드 후 /api/notices가 최신 응답으로 교체합니다.
@@ -15,7 +15,7 @@ export const initialNoticeFeed: NoticeFeed = {
       title: "2026년 1차 일반주택형 미리내집(신혼신생아매입임대주택Ⅱ) 입주자 모집공고(2026.08.14.)",
       housingType: "매입임대",
       region: "서울 전체 · 상세 공급지역 확인",
-      districts: ["서초구", "강남구", "송파구"],
+      districts: SEOUL_DISTRICTS,
       publishedAt: "2026-08-14",
       applyStart: null,
       applyEnd: null,
@@ -32,7 +32,7 @@ export const initialNoticeFeed: NoticeFeed = {
       title: "2026 다자녀 전세임대 입주자 수시모집 공고",
       housingType: "전세임대",
       region: "서울 전체 · 상세 공급지역 확인",
-      districts: ["서초구", "강남구", "송파구"],
+      districts: SEOUL_DISTRICTS,
       publishedAt: "2026-03-24",
       applyStart: "2026-03-24",
       applyEnd: "2026-12-31",
@@ -49,7 +49,7 @@ export const initialNoticeFeed: NoticeFeed = {
       title: "2026년 신혼·신생아 전세임대 I 입주자 수시모집 공고",
       housingType: "전세임대",
       region: "서울 전체 · 상세 공급지역 확인",
-      districts: ["서초구", "강남구", "송파구"],
+      districts: SEOUL_DISTRICTS,
       publishedAt: "2026-03-24",
       applyStart: "2026-03-24",
       applyEnd: "2026-12-31",
@@ -66,7 +66,7 @@ export const initialNoticeFeed: NoticeFeed = {
       title: "2026년 신혼·신생아 전세임대Ⅱ 입주자 수시모집 공고",
       housingType: "전세임대",
       region: "서울 전체 · 상세 공급지역 확인",
-      districts: ["서초구", "강남구", "송파구"],
+      districts: SEOUL_DISTRICTS,
       publishedAt: "2026-03-24",
       applyStart: "2026-03-24",
       applyEnd: "2026-12-31",
@@ -83,7 +83,7 @@ export const initialNoticeFeed: NoticeFeed = {
       title: "2026년 청년 전세임대 1순위 입주자 수시모집",
       housingType: "전세임대",
       region: "서울 전체 · 상세 공급지역 확인",
-      districts: ["서초구", "강남구", "송파구"],
+      districts: SEOUL_DISTRICTS,
       publishedAt: "2026-02-24",
       applyStart: "2026-02-24",
       applyEnd: "2026-12-31",

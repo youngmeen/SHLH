@@ -1,38 +1,25 @@
-import { getWorkerBindings } from "./env";
-import { sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "./schema";
-
-export function getDb() {
-  const env = getWorkerBindings();
-  if (!env?.DB) {
-    throw new Error(
-      "Cloudflare D1 binding `DB` is unavailable. Set the `d1` field in .openai/hosting.json to `DB` or let your control plane inject the real binding values before using the database."
-    );
-  }
-
-  return drizzle(env.DB, { schema });
-}
-
-// 아이소레이트마다 한 번만 만든다. 실패하면 다음 요청에서 다시 시도하도록 비운다.
-let ready: Promise<void> | null = null;
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import * as schema from "./schema.ts";
 
 /**
- * 테이블이 있는 D1 핸들을 돌려준다.
+ * Supabase Postgres 연결.
  *
- * 배포하지 않는 동안 로컬 D1에는 마이그레이션을 적용할 경로가 없으므로
- * 앱이 직접 테이블을 보장한다. 문장은 모두 `IF NOT EXISTS`라 반복 실행이 안전하다.
+ * 접속 문자열은 서버에서만 읽는다(REQUIREMENTS R45). Supabase 신규 프로젝트의 직접
+ * 연결(`db.<ref>.supabase.co`)은 IPv6 전용이므로 IPv4 경로가 있는 Connection Pooler를
+ * 쓴다. Session mode(5432)는 prepared statement를 지원하므로 추가 설정이 필요 없다.
+ *
+ * 개발 중 모듈이 다시 평가되어도 연결이 쌓이지 않도록 전역에 한 번만 만든다.
  */
-export async function getReadyDb() {
-  const db = getDb();
-  ready ??= (async () => {
-    for (const statement of schema.SCHEMA_STATEMENTS) {
-      await db.run(sql.raw(statement));
-    }
-  })().catch((reason) => {
-    ready = null;
-    throw reason;
-  });
-  await ready;
-  return db;
+const globalForDb = globalThis as unknown as { __sql?: ReturnType<typeof postgres> };
+
+function client() {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL이 설정되지 않았습니다.");
+  globalForDb.__sql ??= postgres(url, { max: 4, idle_timeout: 20, connect_timeout: 15 });
+  return globalForDb.__sql;
+}
+
+export function getDb() {
+  return drizzle(client(), { schema });
 }

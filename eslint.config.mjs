@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // 이 프로젝트: 빌드 산출물과 도구 상태
+    "drizzle/**",
+    ".wrangler/**",
   ]),
 ]);
 

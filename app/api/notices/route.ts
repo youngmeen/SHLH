@@ -1,4 +1,4 @@
-import { collectNoticeFeed } from "../../lib/notice-sources";
+import { collectNoticeFeed } from "../../lib/notice-sources.ts";
 
 export async function GET() {
   const feed = await collectNoticeFeed();

@@ -1,21 +1,21 @@
 import { eq } from "drizzle-orm";
-import { getReadyDb } from "../../../db/index.ts";
+import { getDb } from "../../../db/index.ts";
 import { profile as profileTable } from "../../../db/schema.ts";
 import { defaultProfile, parseProfile } from "../../lib/profile.ts";
 
 const PROFILE_ID = 1;
-// 프로필은 브라우저에만 있으면 cron이 판정할 수 없다. 저장소에 두는 대신
+// 프로필은 브라우저에만 있으면 동기화가 판정할 수 없다. 저장소에 두는 대신
 // 응답을 캐시하지 않는다.
 const NO_STORE = { "Cache-Control": "no-store" };
 
 export async function GET() {
   try {
-    const db = await getReadyDb();
+    const db = getDb();
     const [row] = await db.select().from(profileTable).where(eq(profileTable.id, PROFILE_ID)).limit(1);
     if (!row) return Response.json({ profile: defaultProfile, saved: false }, { headers: NO_STORE });
 
     return Response.json(
-      { profile: parseProfile(JSON.parse(row.data)), saved: true, updatedAt: row.updatedAt },
+      { profile: parseProfile(row.data), saved: true, updatedAt: row.updatedAt },
       { headers: NO_STORE },
     );
   } catch (reason) {
@@ -35,14 +35,13 @@ export async function PUT(request: Request) {
 
   const next = parseProfile(incoming);
   try {
-    const db = await getReadyDb();
-    const data = JSON.stringify(next);
+    const db = getDb();
     await db
       .insert(profileTable)
-      .values({ id: PROFILE_ID, data, updatedAt: new Date().toISOString() })
+      .values({ id: PROFILE_ID, data: next, updatedAt: new Date() })
       .onConflictDoUpdate({
         target: profileTable.id,
-        set: { data, updatedAt: new Date().toISOString() },
+        set: { data: next, updatedAt: new Date() },
       });
 
     return Response.json({ profile: next, saved: true }, { headers: NO_STORE });

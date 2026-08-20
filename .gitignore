@@ -44,3 +44,6 @@ next-env.d.ts
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# JetBrains IDE
+.idea/
