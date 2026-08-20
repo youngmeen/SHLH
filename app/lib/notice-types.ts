@@ -59,3 +59,82 @@ export type NoticeFeed = {
   fetchedAt: string;
   sources: SourceState[];
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 저장용 타입 (Phase 2)
+//
+// 화면이 쓰는 PublicNotice는 목록 표시에 맞춰 공고 단위로 눌러 담은 형태다.
+// 저장은 그것과 다르다 — 공고 한 건의 여러 주택 행을 잃지 않아야 하고(SPEC G10),
+// 후속공고도 버리지 않아야 하며(G3), 값의 출처를 함께 남겨야 한다(R42).
+// 그래서 화면 타입을 고치지 않고 저장용 타입을 따로 둔다.
+// 칼럼 구성은 db/schema.ts와 짝을 맞춘다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ValueSource = "official" | "calculated" | "inferred" | "unknown";
+
+export type NoticeSource = "myhome" | "sh-board";
+
+export type HousingUnitSource = "myhome-notice" | "myhome-complex" | "lh-complex" | "soco-youth";
+
+export type StoredNotice = {
+  source: NoticeSource;
+  sourceId: string;
+  title: string;
+  agency: PublicNotice["agency"];
+  instName: string | null;
+  /** 출처가 준 유형 표기를 그대로 둔다. 정규화 값은 저장 단계에서 따로 채운다. */
+  noticeType: string | null;
+  region: string | null;
+  districts: District[];
+  publishedAt: string | null;
+  applyStart: string | null;
+  applyEnd: string | null;
+  announceAt: string | null;
+  /** 출처 표기 그대로 — `일반공고` `정정공고` `모집중` 등. */
+  status: string | null;
+  supplyCount: string | null;
+  sourceUrl: string;
+  /** 정정공고가 가리키는 원 공고 식별자. */
+  beforeSourceId: string | null;
+  raw: unknown;
+};
+
+export type StoredHousingUnit = {
+  source: HousingUnitSource;
+  sourceKey: string;
+  /** 어느 공고에서 나온 주택인지. 재고에서 온 행은 null이다. */
+  noticeSourceId: string | null;
+  instName: string | null;
+  sido: string | null;
+  sigungu: string | null;
+  complexName: string | null;
+  address: string | null;
+  pnu: string | null;
+  unitNo: string | null;
+  supplyType: string | null;
+  houseType: string | null;
+  exclusiveArea: number | null;
+  commonArea: number | null;
+  householdCount: number | null;
+  totalHousehold: number | null;
+  deposit: number | null;
+  monthlyRent: number | null;
+  heating: string | null;
+  parkingCount: number | null;
+  builtOn: string | null;
+  valueSource: ValueSource;
+};
+
+export type FollowUpKind = "결과발표" | "당첨자" | "입주대상자" | "정정" | "기타";
+
+export type StoredFollowUp = {
+  source: NoticeSource;
+  sourceId: string;
+  title: string;
+  kind: FollowUpKind;
+  publishedAt: string | null;
+  sourceUrl: string;
+  /** 원 모집공고를 가리키는 식별자를 알아낸 경우. */
+  relatedSourceId: string | null;
+  raw: unknown;
+};
