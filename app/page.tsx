@@ -11,6 +11,36 @@ type AgencyFilter = "all" | "LH" | "SH";
 type ConditionView = "matched" | "all";
 type SaveState = "idle" | "saving" | "saved" | "error";
 
+// 동기화 기록과 공급주택은 저장된 값이다. 화면은 읽어서 보여주기만 한다.
+type SyncSourceState = { id: string; label: string; ok: boolean; skipped: boolean; count: number; message: string };
+type SyncRunState = {
+  status: "running" | "ok" | "partial" | "failed";
+  trigger: string;
+  startedAt: string;
+  finishedAt: string | null;
+  sources: SyncSourceState[] | null;
+  error: string | null;
+};
+type SyncSummary = { last: SyncRunState | null; lastSuccessAt: string | null; neverRan: boolean; message?: string };
+
+type InventoryUnit = {
+  complexName: string | null;
+  address: string | null;
+  pnu: string | null;
+  unitNo: string | null;
+  exclusiveArea: string | null;
+  deposit: number | null;
+  monthlyRent: number | null;
+  supplyType: string | null;
+};
+type NoticeHousing = {
+  notice: { id: number; supplyCount: string | null; applyEnd: string | null; announceAt: string | null } | null;
+  units: { unit: InventoryUnit & { sigungu: string | null }; link: { status: string; reason: string | null; typeMatched?: boolean; units: InventoryUnit[] } }[];
+  inventory: { district: string; count: number; fetchedAt: string | null; units: InventoryUnit[] }[];
+  districtsOmitted?: number;
+  message?: string;
+};
+
 const maritalLabels: Record<MaritalStatus, string> = {
   single: "미혼",
   married: "기혼",
@@ -37,6 +67,14 @@ const groupNotes: Record<AudienceStatus, string> = {
   likely: "입력한 조건과 관련 있는 공고입니다. 세부 자격은 원문에서 확인하세요.",
   review: "제목만으로는 대상 계층을 알 수 없습니다. 원문의 신청 자격을 직접 확인해야 합니다.",
   mismatch: "입력한 조건과 명백히 다른 대상입니다.",
+};
+
+// 동기화 상태 표기. `실패`와 `일부 실패`를 같은 말로 쓰면 R43 위반이다.
+const syncStatusLabels: Record<string, string> = {
+  running: "진행 중",
+  ok: "정상",
+  partial: "일부 실패",
+  failed: "실패",
 };
 
 const agencyOptions = [
@@ -88,6 +126,12 @@ export default function Home() {
   const [profileOpen, setProfileOpen] = useState(false);
   // 좁은 화면에서는 상세가 목록 아래로 밀려 보이지 않는다. 덮어서 띄운다.
   const [detailSheet, setDetailSheet] = useState(false);
+  // Phase 2. 수집(저장)과 저장된 공급주택.
+  const [syncSummary, setSyncSummary] = useState<SyncSummary | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [housing, setHousing] = useState<NoticeHousing | null>(null);
+  const [housingLoading, setHousingLoading] = useState(false);
 
   // 저장소에 있는 것과 같은 값을 다시 쓰지 않기 위한 기준값.
   const savedSnapshot = useRef<string | null>(null);
@@ -155,6 +199,44 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [loadNotices]);
 
+  // 마지막 동기화 기록. "공고가 없다"와 "수집이 실패했다"를 화면이 구분해서 말하려면
+  // 이 기록이 있어야 한다(R43).
+  const loadSyncSummary = useCallback(async () => {
+    try {
+      const response = await fetch("/api/sync", { headers: { Accept: "application/json" } });
+      setSyncSummary((await response.json()) as SyncSummary);
+    } catch {
+      setSyncSummary({ last: null, lastSuccessAt: null, neverRan: true, message: "동기화 기록을 읽지 못했습니다." });
+    }
+  }, []);
+
+  // 렌더 중 setState를 피해 한 틱 미룬다. 목록 로딩(loadNotices)과 같은 방식이다.
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadSyncSummary(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadSyncSummary]);
+
+  // [수집]. launchd가 부르는 것과 같은 엔드포인트다(SPEC S6).
+  const runSyncNow = useCallback(async () => {
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const response = await fetch("/api/sync", { method: "POST", headers: { Accept: "application/json" } });
+      const data = (await response.json()) as { status?: string; saved?: { notices: number; units: number; followUps: number }; sources?: SyncSourceState[]; message?: string };
+      if (!response.ok) throw new Error(data.message ?? "수집에 실패했습니다.");
+      const failed = (data.sources ?? []).filter((source) => !source.ok && !source.skipped);
+      setSyncMessage(
+        `공고 ${data.saved?.notices ?? 0}건 · 주택 ${data.saved?.units ?? 0}건 · 후속공고 ${data.saved?.followUps ?? 0}건 저장` +
+          (failed.length > 0 ? ` · 실패: ${failed.map((source) => source.label).join(", ")}` : ""),
+      );
+      await loadSyncSummary();
+    } catch (reason) {
+      setSyncMessage(reason instanceof Error ? reason.message : "수집에 실패했습니다.");
+    } finally {
+      setSyncing(false);
+    }
+  }, [loadSyncSummary]);
+
   const districtNotices = useMemo(
     () => feed.notices.filter((notice) => notice.districts.some((district) => profile.districts.includes(district))),
     [feed.notices, profile.districts],
@@ -183,6 +265,7 @@ export default function Home() {
   // 주소 문자열에만 반응한다. 목록이 새로 들어와 같은 공고의 객체 참조만 바뀌는
   // 경우에 상세를 다시 읽지 않기 위한 것이다.
   const selectedSourceUrl = selected?.sourceUrl;
+  const selectedNoticeId = selected?.id;
 
   useEffect(() => {
     if (!selectedSourceUrl) return;
@@ -249,6 +332,33 @@ export default function Home() {
     setProfileOpen(false);
   }
 
+  // 저장된 공급주택. 수집을 돌리지 않았으면 비어 있고, 화면은 그렇게 말한다.
+  useEffect(() => {
+    if (!selectedNoticeId) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setHousing(null);
+      setHousingLoading(true);
+      void fetch(`/api/notice-housing?id=${encodeURIComponent(selectedNoticeId)}`, {
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      })
+        .then(async (response) => setHousing((await response.json()) as NoticeHousing))
+        .catch(() => {
+          if (!controller.signal.aborted) setHousing({ notice: null, units: [], inventory: [], message: "공급주택을 읽지 못했습니다." });
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setHousingLoading(false);
+        });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [selectedNoticeId]);
+
   const profileSummary = `${profile.age}세 · ${profile.householdSize}인 · ${profile.monthlyIncome.toLocaleString()}만원`;
   const okSources = feed.sources.filter((source) => source.ok).length;
 
@@ -261,6 +371,7 @@ export default function Home() {
           <small>내 조건</small><strong>{profileSummary}</strong>
         </button>
         <button className="telegramButton" type="button" onClick={() => void loadNotices(true)} disabled={loading}>{loading ? "불러오는 중" : "공고 새로고침"}</button>
+        <button className="telegramButton" type="button" onClick={() => void runSyncNow()} disabled={syncing} title="수집한 공고와 공급주택을 저장소에 저장합니다">{syncing ? "수집 중" : "수집"}</button>
       </header>
 
       <div className="demoBanner" role="note">
@@ -285,10 +396,24 @@ export default function Home() {
         <div className="summaryMeta">
           <span>최근 공식 수집 {formatFetchedAt(feed.fetchedAt)}</span>
           <small>{okSources}/{feed.sources.length || 2}개 소스 정상 · 15분 캐시</small>
+          <small>
+            {syncSummary?.neverRan
+              ? "저장 이력 없음 · [수집]을 누르면 저장을 시작합니다"
+              : `마지막 저장 ${formatFetchedAt(syncSummary?.lastSuccessAt ?? "")} · ${syncStatusLabels[syncSummary?.last?.status ?? ""] ?? "상태 미확인"}`}
+          </small>
+          <small><a href="/api/export" download>내 데이터 내보내기(JSON)</a></small>
         </div>
       </div>
 
       {error && <p className="summaryError" role="status">{error}</p>}
+      {syncMessage && <p className="summaryError" role="status">{syncMessage}</p>}
+      {syncSummary?.last?.sources
+        ?.filter((source) => !source.ok && !source.skipped)
+        .map((source) => (
+          <p className="summaryError" role="status" key={source.id}>
+            {source.label} 저장 실패 · {source.message}
+          </p>
+        ))}
 
       <div className="browser">
         <section className="noticeColumn" aria-label="모집공고 목록" aria-busy={loading}>
@@ -352,6 +477,45 @@ export default function Home() {
                     <article><small>신청일정</small><p>{noticeDetail.schedule ?? `접수 ${formatDate(selected.applyStart)} ~ ${formatDate(selected.applyEnd)}`}</p></article>
                     <article><small>제출서류·주의사항</small><p>{noticeDetail.documents ?? noticeDetail.caution ?? "제출서류와 유의사항은 공식 공고문 첨부파일에서 확인해 주세요."}</p></article>
                   </div>
+                )}
+              </section>
+
+              <section className="officialBrief">
+                <div className="officialBriefHeader"><div><p>SUPPLY UNITS</p><h3>공급주택과 자치구 재고</h3></div><span>저장된 공식 데이터</span></div>
+                {housingLoading && <div className="briefState">저장된 공급주택을 불러오고 있습니다.</div>}
+                {!housingLoading && housing?.message && <div className="briefState warning">{housing.message}</div>}
+                {!housingLoading && housing && !housing.message && housing.units.length === 0 && (
+                  <div className="briefState">
+                    공식 자료로 확인된 공급주택이 없습니다. 전세임대는 공고 시점에 공급주택이 정해지지 않습니다.
+                  </div>
+                )}
+                {!housingLoading && housing && housing.units.length > 0 && (
+                  <div className="briefGrid">
+                    {housing.units.map(({ unit, link }, index) => (
+                      <article key={`${unit.complexName ?? "unit"}-${index}`}>
+                        <small>{unit.complexName ?? "단지명 미확보"}{unit.sigungu ? ` · ${unit.sigungu}` : ""}</small>
+                        <p>
+                          {unit.address ?? "주소 미확보"}
+                          {unit.deposit !== null ? ` · 보증금 ${unit.deposit.toLocaleString()}원` : ""}
+                          {unit.monthlyRent !== null ? ` · 월 ${unit.monthlyRent.toLocaleString()}원` : ""}
+                          {" · "}
+                          {link.status === "matched"
+                            ? `전용 ${link.units.map((row) => row.exclusiveArea).filter(Boolean).join("㎡ · ")}㎡ (재고 대조${link.typeMatched ? " · 유형 일치" : ""})`
+                            : "전용면적 미확보 (재고에서 같은 단지를 찾지 못했습니다)"}
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+                {!housingLoading &&
+                  housing?.inventory?.map((entry) => (
+                    <div className="briefState" key={entry.district}>
+                      {entry.district} 재고 {entry.count.toLocaleString()}건
+                      {entry.fetchedAt ? ` · ${formatFetchedAt(entry.fetchedAt)} 기준` : " · 아직 받지 않았습니다"}
+                    </div>
+                  ))}
+                {!housingLoading && (housing?.districtsOmitted ?? 0) > 0 && (
+                  <div className="briefState">자치구를 특정하지 않은 공고입니다({housing?.districtsOmitted}개 구). 재고는 원문에서 공급지역을 확인한 뒤 대조하세요.</div>
                 )}
               </section>
 

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  집알림 동기화 스케줄. 하루 2회(09:00·18:00).
+
+  하루 1회면 최악 약 24시간 지연이라 Phase 8 완료 조건(12시간 이내 알림)을 만족하지
+  못한다. 2회면 최대 15시간이다(SPEC S6).
+
+  설치 (경로는 이 저장소 위치에 맞게 고칠 것)
+    cp scripts/com.jib-alim.sync.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jib-alim.sync.plist
+  확인 / 해제
+    launchctl print gui/$(id -u)/com.jib-alim.sync
+    launchctl bootout gui/$(id -u)/com.jib-alim.sync
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.jib-alim.sync</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>/Users/developer/Desktop/50_프로젝트/lh-sh-housing-planner-site/scripts/sync.sh</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict>
+      <key>Hour</key><integer>9</integer>
+      <key>Minute</key><integer>0</integer>
+    </dict>
+    <dict>
+      <key>Hour</key><integer>18</integer>
+      <key>Minute</key><integer>0</integer>
+    </dict>
+  </array>
+
+  <!-- 절전에서 깨어난 직후 밀린 실행을 한 번 수행한다. -->
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/developer/Library/Logs/jib-alim/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/developer/Library/Logs/jib-alim/launchd.err.log</string>
+</dict>
+</plist>

@@ -89,6 +89,8 @@ export type StoredNotice = {
   publishedAt: string | null;
   applyStart: string | null;
   applyEnd: string | null;
+  /** 마감 시각까지 아는 경우만. 출처가 시각을 주지 않으면 채우지 않는다. */
+  applyDeadlineAt?: string | null;
   announceAt: string | null;
   /** 출처 표기 그대로 — `일반공고` `정정공고` `모집중` 등. */
   status: string | null;
@@ -175,3 +177,24 @@ export const SEOUL_SIGUNGU_CODE: Record<District, string> = {
   송파구: "710",
   강동구: "740",
 };
+
+/**
+ * 공식 공급유형 표기. 제목·단지명에서 유형을 알아내는 모든 곳이 이 목록을 본다.
+ *
+ * 순서가 결과를 바꾼다 — `통합공공임대`를 `공공임대`보다 먼저 두어야 긴 이름이
+ * 짧은 이름에 먹히지 않는다. 여기에 없는 낱말(`청년주택`·`특화형` 같은 사업
+ * 브랜드명)은 유형이 아니다. 유형으로 취급하면 단지명에서 떼어내 엉뚱한 단지에
+ * 붙는다(SPEC 6절).
+ */
+export const SUPPLY_TYPE_KEYWORDS = [
+  "청년안심주택",
+  "통합공공임대",
+  "신혼희망타운",
+  "행복주택",
+  "장기전세",
+  "국민임대",
+  "영구임대",
+  "매입임대",
+  "전세임대",
+  "공공임대",
+] as const;

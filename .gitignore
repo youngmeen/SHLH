@@ -40,6 +40,7 @@ next-env.d.ts
 /dist/
 /.wrangler/
 /outputs/
+/backups/
 /work/
 
 # TypeScript incremental build cache

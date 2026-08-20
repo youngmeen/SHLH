@@ -28,15 +28,18 @@
 
 완료된 것
 
-- 마이홈 API·SH 게시판에서 서울 전체 모집공고 수집 (후속공고 구분, 중복 제거)
-- 제목 기반 대상 계층 1차 분류
-- LH 공식 상세 페이지에서 신청자격·임대조건·일정 추출
-- 공식 경쟁률이 확인된 경우만 표시
-- 프로필 저장 (서버 재시작 후에도 유지)
+- 마이홈 API·SH 게시판에서 서울 전체 모집공고 수집 (후속공고 보관, 정정공고 구분, 중복 제거)
+- 공고 안의 개별 공급주택 구조화 — 마이홈이 주는 주택 단위 행을 살리고, 단지정보 API에서 전용면적·주소·PNU·보증금·월임대료를 붙입니다
+- 서울주거포털에서 SH 공고의 접수기간·발표일·모집상태·공급호수 보충
+- 공고 단지명 ↔ 재고 건물명 조인. 이름이 어긋나면 잇지 않고 `미확보`로 둡니다
+- `[수집]` 버튼과 `/api/sync` — 수집·저장·재고 갱신을 한 함수로 처리하고 실행 이력을 남깁니다
+- 내보내기(`/api/export`) — 무료 티어에 백업이 없으므로 내 데이터를 한 파일로 받습니다
+- 제목 기반 대상 계층 1차 분류, LH 상세에서 신청자격·임대조건·일정 추출, 공식 경쟁률만 표시
 
 아직 없는 것
 
-- 공고 안의 개별 공급주택 구조화 (Phase 2)
+- 저장소 연결 확인 — `.env.local`에 `DATABASE_URL`을 넣고 `npm run db:migrate`를 실행해야 저장이 시작됩니다
+- 자동 동기화 등록 — `scripts/com.jib-alim.sync.plist`를 `launchctl`로 걸어야 09:00·18:00에 돕니다
 - 소득·자산·청약통장 기반 자격 판정 (Phase 3)
 - 출퇴근 시간 판단, 경기도 공고 (Phase 4)
 - 전세임대 전용 정보 (Phase 5), 과거 경쟁률 (Phase 6), 추천 (Phase 7)
@@ -68,6 +71,22 @@ DATABASE_URL=Supabase_Postgres_접속문자열
 ```
 
 다른 컴퓨터로 옮길 때 Git을 쓰지 않는다면 `node_modules`, `.next`, `.env.local`을 제외하고 새로 만듭니다. 데이터는 Supabase에 있으므로 함께 옮길 필요가 없습니다.
+
+### 저장 시작하기
+
+```bash
+npm run db:migrate           # notice · housing_unit · follow_up_notice · sync_run 등 7개 테이블 생성
+curl -X POST http://localhost:3000/api/sync   # 화면의 [수집] 버튼과 같은 경로
+curl http://localhost:3000/api/sync           # 마지막 동기화 기록
+```
+
+하루 2회(09:00·18:00) 자동 실행은 launchd에 걸어 둡니다. `npm run dev`가 떠 있어야 합니다.
+
+```bash
+cp scripts/com.jib-alim.sync.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jib-alim.sync.plist
+tail -f ~/Library/Logs/jib-alim/sync.log
+```
 
 ### 확인
 

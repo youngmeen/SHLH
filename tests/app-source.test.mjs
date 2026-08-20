@@ -42,6 +42,16 @@ test("화면이 실데이터 경로를 유지한다", async () => {
   assert.doesNotMatch(page, /DEMO-SH-|가상 공고/, "가짜 공고가 섞이면 안 된다");
 });
 
+test("화면이 저장·동기화 경로에 연결돼 있다", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  // Phase 2의 연결 지점이다. 버튼만 있고 엔드포인트를 부르지 않으면 수집이 돌지 않는다.
+  assert.match(page, /\/api\/sync/, "[수집] 버튼이 /api/sync를 불러야 한다");
+  assert.match(page, /\/api\/notice-housing/, "공고별 공급주택을 API에서 받아야 한다");
+  // 무료 티어에 백업이 없다. 내 데이터를 받을 경로가 화면에 있어야 한다(R47 · S4).
+  assert.match(page, /\/api\/export/, "내보내기 경로가 화면에 있어야 한다");
+});
+
 test("메타데이터와 공개 자산이 있다", async () => {
   const layout = await readFile(new URL("../app/layout.tsx", import.meta.url), "utf8");
   assert.match(layout, /집알림/);

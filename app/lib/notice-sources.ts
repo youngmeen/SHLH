@@ -1,5 +1,6 @@
 import {
   SEOUL_DISTRICTS,
+  SUPPLY_TYPE_KEYWORDS,
   shortDistrictName,
   type District,
   type NoticeFeed,
@@ -66,8 +67,7 @@ function formatApiDate(value?: string) {
 }
 
 function inferHousingType(title: string, fallback = "공공임대") {
-  const types = ["청년안심주택", "통합공공임대", "신혼희망타운", "행복주택", "장기전세", "국민임대", "영구임대", "매입임대", "전세임대", "공공임대"];
-  return types.find((type) => title.includes(type)) ?? fallback;
+  return SUPPLY_TYPE_KEYWORDS.find((type) => title.includes(type)) ?? fallback;
 }
 
 function isRecruitmentPost(title: string) {
@@ -207,7 +207,11 @@ export function mergeShPages(pageHtmls: string[]): PublicNotice[] {
   return [...merged.values()];
 }
 
-async function collectMyHome() {
+/**
+ * 마이홈 모집공고 응답 한 번. 화면용 목록과 저장용 추출이 같은 응답을 쓰므로
+ * 요청을 여기 한 곳에 둔다.
+ */
+async function fetchMyHomePayload() {
   // 공공데이터포털은 계정 인증키 하나로 승인된 모든 API를 호출한다. 마이홈 모집공고와
   // 단지정보, LH API가 같은 키를 쓰므로 기관 이름을 딴 옛 변수명은 fallback으로만 남긴다.
   const key = process.env.DATA_GO_KR_API_KEY ?? process.env.MOLIT_MYHOME_API_KEY;
@@ -223,12 +227,21 @@ async function collectMyHome() {
         signal: AbortSignal.timeout(NOTICE_FETCH_TIMEOUT_MS),
       });
       if (!response.ok) throw new Error(`마이홈 HTTP ${response.status}`);
-      return parseMyHomeNotices(await response.json() as MyHomePayload);
+      return (await response.json()) as MyHomePayload;
     } catch (reason) {
       lastError = reason instanceof Error ? reason : new Error("마이홈 수집 실패");
     }
   }
   throw lastError ?? new Error("마이홈 수집 실패");
+}
+
+async function collectMyHome() {
+  return parseMyHomeNotices(await fetchMyHomePayload());
+}
+
+/** 저장용. 공고 한 건의 주택 단위 행을 살려서 돌려준다(G10). */
+export async function collectMyHomeRecords(): Promise<MyHomeRecords> {
+  return extractMyHomeRecords(await fetchMyHomePayload());
 }
 
 // 한 페이지는 10행이다. 1페이지만 읽으면 아직 접수 중인 공고를 놓치므로
@@ -249,11 +262,17 @@ async function fetchShPage(page: number) {
   return response.text();
 }
 
+async function fetchShPages() {
+  return Promise.all(Array.from({ length: SH_LIST_PAGE_COUNT }, (_, index) => fetchShPage(index + 1)));
+}
+
 async function collectSh() {
-  const pages = await Promise.all(
-    Array.from({ length: SH_LIST_PAGE_COUNT }, (_, index) => fetchShPage(index + 1)),
-  );
-  return mergeShPages(pages);
+  return mergeShPages(await fetchShPages());
+}
+
+/** 저장용. 후속공고를 버리지 않고 함께 돌려준다(G3). */
+export async function collectShRecords(): Promise<ShRecords> {
+  return extractShRecords(await fetchShPages());
 }
 
 export async function collectNoticeFeed(): Promise<NoticeFeed> {
