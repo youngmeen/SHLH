@@ -101,11 +101,15 @@ export function summarizeInventory(rows: InventoryUnitRow[]): ComplexSummary[] {
  * PDF 주소에는 구가 빠져 있을 수 있어(예: "시흥대로145길 67") 자치구 힌트를
  * 앞에 붙인다 — 검색 정확도를 위한 보강이지 주소를 지어내는 것이 아니다.
  */
-export function mapSearchUrl(address: string, districtHint: string | null): string {
+export function mapQuery(address: string, districtHint: string | null): string {
   let query = address.trim();
   if (!/서울/.test(query)) {
     if (districtHint && !query.includes(districtHint)) query = `${districtHint} ${query}`;
     query = `서울 ${query}`;
   }
-  return `https://map.kakao.com/link/search/${encodeURIComponent(query)}`;
+  return query;
+}
+
+export function mapSearchUrl(address: string, districtHint: string | null): string {
+  return `https://map.kakao.com/link/search/${encodeURIComponent(mapQuery(address, districtHint))}`;
 }

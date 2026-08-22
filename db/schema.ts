@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { bigint, doublePrecision, index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 /**
  * 프로필은 한 사람의 것이므로 항상 한 행이다(id = 1).
@@ -163,3 +163,19 @@ export const syncRun = pgTable(
   },
   (table) => [index("sync_run_started").on(table.startedAt)],
 );
+
+/**
+ * 주소 → 좌표 캐시 (지도 표시용 · 2026-08-23).
+ *
+ * 지오코딩 제공자(Nominatim은 초당 1건 제한)를 같은 주소로 두 번 부르지
+ * 않기 위한 영구 캐시다. 좌표가 null인 행은 "찾지 못했다"는 결과 캐시로,
+ * 매번 다시 물어보지 않게 한다. 공공주택 주소만 저장하며 프로필과 무관하다(R47).
+ */
+export const geocode = pgTable("geocode", {
+  /** 질의 주소 (서울·자치구 보강을 마친 형태). */
+  query: text("query").primaryKey(),
+  lat: doublePrecision("lat"),
+  lng: doublePrecision("lng"),
+  provider: text("provider").notNull(),
+  geocodedAt: timestamp("geocoded_at", { withTimezone: true }).notNull().default(sql`now()`),
+});

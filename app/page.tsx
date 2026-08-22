@@ -1,11 +1,16 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SEOUL_DISTRICTS, shortDistrictName, type District, type NoticeFeed } from "./lib/notice-types";
 import { initialNoticeFeed } from "./lib/initial-notice-feed";
 import { evaluateAudience, type AudienceStatus, type MaritalStatus } from "./lib/audience-match";
 import { ageOnDate, evaluateEligibility, type EligibilityStatus } from "./lib/eligibility";
-import { formatArea, formatManwon, mapSearchUrl, sqmToPyeong, summarizeInventory } from "./lib/format";
+import { formatArea, formatManwon, mapQuery, mapSearchUrl, sqmToPyeong, summarizeInventory } from "./lib/format";
+import type { MapPoint } from "./notice-map";
+
+// Leaflet은 window를 만지므로 서버 렌더에서 제외한다.
+const NoticeMap = dynamic(() => import("./notice-map"), { ssr: false });
 import type { PdfHousingRow } from "./lib/pdf-units";
 import { defaultProfile, parseProfile, type Profile, type Residence, type Welfare } from "./lib/profile";
 import type { NoticeDetail } from "./lib/notice-detail";
@@ -148,6 +153,9 @@ export default function Home() {
   // 공고문 PDF에서 뽑은 공급주택(S3). SH 게시판 공고에서만 시도한다.
   const [pdfUnits, setPdfUnits] = useState<{ attachment: string | null; rows: PdfHousingRow[]; message?: string } | null>(null);
   const [pdfUnitsLoading, setPdfUnitsLoading] = useState(false);
+  // 주소 → 좌표. 세션 동안 쌓아두는 클라이언트 캐시 (서버에도 영구 캐시가 있다).
+  const [geoPoints, setGeoPoints] = useState<Record<string, { lat: number; lng: number }>>({});
+  const [geoPending, setGeoPending] = useState(0);
 
   // 저장소에 있는 것과 같은 값을 다시 쓰지 않기 위한 기준값.
   const savedSnapshot = useRef<string | null>(null);
@@ -419,6 +427,97 @@ export default function Home() {
   // 생년월일이 있으면 오늘 기준 만 나이를 보여준다. 판정 표는 공고일 기준으로 따로 계산한다(R12).
   const todayAge = ageOnDate(profile.birthDate, new Date().toISOString().slice(0, 10)) ?? profile.age;
   const profileSummary = `만 ${todayAge}세 · ${profile.householdSize}인 · ${profile.monthlyIncome.toLocaleString()}만원`;
+  // 지도에 올릴 위치들: 공고문 PDF 공급주택 + LH 주택 + 자치구 재고 단지(참고).
+  const mapItems = (() => {
+    if (!selected) return [] as { query: string; label: string; detail: string; kind: MapPoint["kind"] }[];
+    const districtHint = selected.districts[0] ?? null;
+    const items: { query: string; label: string; detail: string; kind: MapPoint["kind"] }[] = [];
+
+    for (const row of pdfUnits?.rows ?? []) {
+      items.push({
+        query: mapQuery(row.address, districtHint),
+        label: row.name ?? row.address,
+        detail: row.area ? `전용 ${row.area}㎡ · 공고문 추출` : "공고문 추출 · 면적은 원문 확인",
+        kind: "supply",
+      });
+    }
+    for (const { unit } of housing?.units ?? []) {
+      if (!unit.address) continue;
+      items.push({
+        query: mapQuery(unit.address, null),
+        label: unit.complexName ?? unit.address,
+        detail: [formatManwon(unit.deposit) && `보증금 ${formatManwon(unit.deposit)}`, formatManwon(unit.monthlyRent) && `월 ${formatManwon(unit.monthlyRent)}`]
+          .filter(Boolean).join(" · ") || "이 공고의 공급주택",
+        kind: "supply",
+      });
+    }
+    for (const entry of housing?.inventory ?? []) {
+      for (const complex of summarizeInventory(entry.units ?? []).slice(0, 8)) {
+        if (!complex.address) continue;
+        items.push({
+          query: mapQuery(complex.address, null),
+          label: complex.name,
+          detail: `자치구 재고 참고 · 표본 ${complex.count}호`,
+          kind: "inventory",
+        });
+      }
+    }
+
+    // 같은 주소는 한 점만 — 공급주택이 재고보다 우선한다(위에서 먼저 넣었다).
+    const seen = new Set<string>();
+    const unique: typeof items = [];
+    for (const item of items) {
+      if (seen.has(item.query)) continue;
+      seen.add(item.query);
+      unique.push(item);
+    }
+    return unique;
+  })();
+  // effect 의존성용 안정 키 — mapItems 배열은 렌더마다 새 객체다.
+  const mapItemsKey = mapItems.map((item) => item.query).join("\n");
+
+  // 좌표 확인. 서버가 한 번에 일부만 처리하면(pending) 끝날 때까지 다시 부른다.
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      if (!mapItemsKey) {
+        setGeoPending(0);
+        return;
+      }
+      const queries = [...new Set(mapItemsKey.split("\n"))];
+      for (let round = 0; round < 8 && !cancelled; round++) {
+        try {
+          const response = await fetch("/api/geocode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ queries }),
+          });
+          if (!response.ok) return;
+          const data = await response.json() as { points: { query: string; lat: number; lng: number }[]; pending: number };
+          if (cancelled) return;
+          setGeoPoints((current) => {
+            const next = { ...current };
+            for (const point of data.points) next[point.query] = { lat: point.lat, lng: point.lng };
+            return next;
+          });
+          setGeoPending(data.pending);
+          if (data.pending === 0) return;
+        } catch {
+          return; // 좌표 확인 실패는 조용히 — 지도 없이도 목록은 남는다
+        }
+      }
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [mapItemsKey]);
+
+  const mapMarkers = mapItems.flatMap((item) => {
+    const point = geoPoints[item.query];
+    return point ? [{ ...point, label: item.label, detail: item.detail, kind: item.kind }] : [];
+  });
+
   // 자격 판정(Phase 3). 상세 텍스트가 아직 없으면 없는 대로 판정한다 — 그 항목은 확인 필요로 나온다(R14).
   const eligibility = selected
     ? evaluateEligibility(profile, { title: selected.title, publishedAt: selected.publishedAt }, noticeDetail?.eligibility ?? null)
@@ -546,6 +645,20 @@ export default function Home() {
 
               <section className="officialBrief">
                 <div className="officialBriefHeader"><div><p>SUPPLY UNITS</p><h3>공급주택과 자치구 재고</h3></div><span>저장된 공식 데이터</span></div>
+                {mapMarkers.length > 0 && (
+                  <>
+                    <NoticeMap points={mapMarkers} />
+                    <div className="briefState">
+                      진한 초록 = 이 공고의 공급주택 · 회색 = 자치구 재고(참고).
+                      {geoPending > 0
+                        ? ` 위치 ${geoPending}곳을 더 확인하고 있습니다 — 처음 보는 주소는 시간이 걸립니다.`
+                        : " 좌표는 OpenStreetMap 검색 결과라 근사값일 수 있습니다. 정확한 위치는 주소 옆 지도 링크에서."}
+                    </div>
+                  </>
+                )}
+                {mapMarkers.length === 0 && geoPending > 0 && (
+                  <div className="briefState">지도에 표시할 좌표를 확인하고 있습니다 ({geoPending}곳 남음).</div>
+                )}
                 {housingLoading && <div className="briefState">저장된 공급주택을 불러오고 있습니다.</div>}
                 {selected.agency === "SH" && pdfUnitsLoading && (
                   <div className="briefState">공고문 PDF에서 공급주택을 읽고 있습니다 (첫 조회는 몇 초 걸립니다).</div>

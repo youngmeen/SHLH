@@ -15,6 +15,13 @@
       "when": 1787216369357,
       "tag": "0001_nebulous_magneto",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787421519312,
+      "tag": "0002_stale_havok",
+      "breakpoints": true
     }
   ]
 }
