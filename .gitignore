@@ -48,3 +48,7 @@ next-env.d.ts
 
 # JetBrains IDE
 .idea/
+
+# Claude Code 로컬 설정 (기기별)
+.claude/settings.local.json
+.claude/*.doctor-backup*
