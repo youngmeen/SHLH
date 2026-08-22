@@ -5,7 +5,8 @@ import { SEOUL_DISTRICTS, shortDistrictName, type District, type NoticeFeed } fr
 import { initialNoticeFeed } from "./lib/initial-notice-feed";
 import { evaluateAudience, type AudienceStatus, type MaritalStatus } from "./lib/audience-match";
 import { ageOnDate, evaluateEligibility, type EligibilityStatus } from "./lib/eligibility";
-import { formatArea, formatManwon, sqmToPyeong, summarizeInventory } from "./lib/format";
+import { formatArea, formatManwon, mapSearchUrl, sqmToPyeong, summarizeInventory } from "./lib/format";
+import type { PdfHousingRow } from "./lib/pdf-units";
 import { defaultProfile, parseProfile, type Profile, type Residence, type Welfare } from "./lib/profile";
 import type { NoticeDetail } from "./lib/notice-detail";
 
@@ -144,6 +145,9 @@ export default function Home() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [housing, setHousing] = useState<NoticeHousing | null>(null);
   const [housingLoading, setHousingLoading] = useState(false);
+  // 공고문 PDF에서 뽑은 공급주택(S3). SH 게시판 공고에서만 시도한다.
+  const [pdfUnits, setPdfUnits] = useState<{ attachment: string | null; rows: PdfHousingRow[]; message?: string } | null>(null);
+  const [pdfUnitsLoading, setPdfUnitsLoading] = useState(false);
 
   // 저장소에 있는 것과 같은 값을 다시 쓰지 않기 위한 기준값.
   const savedSnapshot = useRef<string | null>(null);
@@ -377,6 +381,41 @@ export default function Home() {
     };
   }, [selectedNoticeId]);
 
+  // 공고문 PDF의 공급주택. 첫 요청은 PDF 파싱 때문에 수 초 걸리고, 이후는
+  // 하루 캐시에서 온다. SH 게시판 주소가 아니면 시도하지 않는다.
+  const selectedAgency = selected?.agency;
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      if (!selectedSourceUrl || selectedAgency !== "SH") {
+        setPdfUnits(null);
+        return;
+      }
+      setPdfUnits(null);
+      setPdfUnitsLoading(true);
+      void fetch(`/api/notice-pdf-units?sourceUrl=${encodeURIComponent(selectedSourceUrl)}`, {
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          const data = await response.json() as { attachment: string | null; rows: PdfHousingRow[]; message?: string };
+          setPdfUnits(response.ok ? data : { attachment: null, rows: [], message: data.message ?? "공고문 PDF를 읽지 못했습니다." });
+        })
+        .catch((reason) => {
+          if (reason instanceof DOMException && reason.name === "AbortError") return;
+          setPdfUnits({ attachment: null, rows: [], message: "공고문 PDF를 읽지 못했습니다. 원문에서 확인하세요." });
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setPdfUnitsLoading(false);
+        });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [selectedSourceUrl, selectedAgency]);
+
   // 생년월일이 있으면 오늘 기준 만 나이를 보여준다. 판정 표는 공고일 기준으로 따로 계산한다(R12).
   const todayAge = ageOnDate(profile.birthDate, new Date().toISOString().slice(0, 10)) ?? profile.age;
   const profileSummary = `만 ${todayAge}세 · ${profile.householdSize}인 · ${profile.monthlyIncome.toLocaleString()}만원`;
@@ -508,6 +547,38 @@ export default function Home() {
               <section className="officialBrief">
                 <div className="officialBriefHeader"><div><p>SUPPLY UNITS</p><h3>공급주택과 자치구 재고</h3></div><span>저장된 공식 데이터</span></div>
                 {housingLoading && <div className="briefState">저장된 공급주택을 불러오고 있습니다.</div>}
+                {selected.agency === "SH" && pdfUnitsLoading && (
+                  <div className="briefState">공고문 PDF에서 공급주택을 읽고 있습니다 (첫 조회는 몇 초 걸립니다).</div>
+                )}
+                {selected.agency === "SH" && !pdfUnitsLoading && pdfUnits?.message && (
+                  <div className="briefState warning">{pdfUnits.message}</div>
+                )}
+                {selected.agency === "SH" && !pdfUnitsLoading && pdfUnits && pdfUnits.rows.length > 0 && (
+                  <>
+                    <div className="briefState">
+                      공고문 PDF에서 자동 추출한 공급주택 {pdfUnits.rows.length}곳 — 「{pdfUnits.attachment}」 기준.
+                      표를 기계로 읽은 결과이므로 지원 전 원문과 대조하세요.
+                    </div>
+                    <div className="briefGrid">
+                      {pdfUnits.rows.map((row) => {
+                        const districtHint = selected.districts[0] ?? null;
+                        const range = row.area?.match(/^(\d+\.?\d*)~(\d+\.?\d*)$/);
+                        const areaText = row.area
+                          ? range
+                            ? `전용 ${row.area}㎡ · 약 ${sqmToPyeong(Number(range[1]))}~${sqmToPyeong(Number(range[2]))}평`
+                            : `전용 ${formatArea(row.area) ?? `${row.area}㎡`}`
+                          : "면적은 원문 확인";
+                        return (
+                          <article key={row.address}>
+                            <small>{row.name ?? "단지명은 원문 확인"}</small>
+                            <p><b>📍 {row.address}</b> <a href={mapSearchUrl(row.address, districtHint)} target="_blank" rel="noreferrer">지도</a></p>
+                            <p>{areaText}</p>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
                 {!housingLoading && housing?.message && <div className="briefState warning">{housing.message}</div>}
                 {!housingLoading && housing && !housing.message && housing.units.length === 0 && (
                   <div className="briefState">
@@ -519,7 +590,7 @@ export default function Home() {
                     {housing.units.map(({ unit, link }, index) => (
                       <article key={`${unit.complexName ?? "unit"}-${index}`}>
                         <small>{unit.complexName ?? "단지명 미확보"}{unit.sigungu ? ` · ${unit.sigungu}` : ""}{unit.supplyType ? ` · ${unit.supplyType}` : ""}</small>
-                        <p><b>📍 {unit.address ?? "주소 미확보"}</b></p>
+                        <p><b>📍 {unit.address ?? "주소 미확보"}</b>{unit.address && <> <a href={mapSearchUrl(unit.address, null)} target="_blank" rel="noreferrer">지도</a></>}</p>
                         <p>
                           {link.status === "matched"
                             ? `전용 ${link.units.map((row) => formatArea(row.exclusiveArea)).filter(Boolean).join(" / ")} (재고 대조${link.typeMatched ? " · 유형 일치" : ""})`
@@ -551,7 +622,7 @@ export default function Home() {
                             {complexes.slice(0, 8).map((complex) => (
                               <article key={`${entry.district}-${complex.name}`}>
                                 <small>{complex.name} · 표본 {complex.count}호{complex.supplyTypes.length > 0 ? ` · ${complex.supplyTypes.join("·")}` : ""}</small>
-                                <p><b>📍 {complex.address ?? "주소 미확보"}</b></p>
+                                <p><b>📍 {complex.address ?? "주소 미확보"}</b>{complex.address && <> <a href={mapSearchUrl(complex.address, null)} target="_blank" rel="noreferrer">지도</a></>}</p>
                                 <p>
                                   {complex.minArea !== null && complex.maxArea !== null
                                     ? complex.minArea === complex.maxArea
