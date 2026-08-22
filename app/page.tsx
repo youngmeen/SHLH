@@ -5,6 +5,7 @@ import { SEOUL_DISTRICTS, shortDistrictName, type District, type NoticeFeed } fr
 import { initialNoticeFeed } from "./lib/initial-notice-feed";
 import { evaluateAudience, type AudienceStatus, type MaritalStatus } from "./lib/audience-match";
 import { ageOnDate, evaluateEligibility, type EligibilityStatus } from "./lib/eligibility";
+import { formatArea, formatManwon, sqmToPyeong, summarizeInventory } from "./lib/format";
 import { defaultProfile, parseProfile, type Profile, type Residence, type Welfare } from "./lib/profile";
 import type { NoticeDetail } from "./lib/notice-detail";
 
@@ -122,7 +123,9 @@ export default function Home() {
   const [feed, setFeed] = useState<NoticeFeed>(initialNoticeFeed);
   const [agencyFilter, setAgencyFilter] = useState<AgencyFilter>("all");
   const [conditionView, setConditionView] = useState<ConditionView>("matched");
-  const [selectedId, setSelectedId] = useState("");
+  // ?notice=ID 로 특정 공고를 바로 연다 — 알림(Phase 8)이 이 링크를 쓴다.
+  const [selectedId, setSelectedId] = useState(() =>
+    typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("notice") ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sentNotice, setSentNotice] = useState<string | null>(null);
@@ -262,7 +265,13 @@ export default function Home() {
   const byAgency = (key: AgencyFilter) =>
     key === "all" ? conditionResults : conditionResults.filter(({ notice }) => notice.agency === key);
   const visibleResults = byAgency(agencyFilter);
-  const selectedResult = visibleResults.find(({ notice }) => notice.id === selectedId) ?? visibleResults[0];
+  // 딥링크(?notice=ID)로 온 공고는 관심 지역·조건 필터에 걸러져 있어도 연다 —
+  // 알림 링크가 필터 상태와 무관하게 동작해야 한다.
+  const deepLinked = selectedId ? feed.notices.find((notice) => notice.id === selectedId) : undefined;
+  const selectedResult =
+    visibleResults.find(({ notice }) => notice.id === selectedId)
+      ?? (deepLinked ? { notice: deepLinked, fit: evaluateAudience(profile, deepLinked) } : undefined)
+      ?? visibleResults[0];
   const selected = selectedResult?.notice;
   // 판정 결과별로 묶어서 보여준다. 섞어놓으면 "제목으로 판정할 수 없는 공고"가
   // 조건에 맞는 공고처럼 읽힌다. 제목만으로 신청 가능을 확정하지 않는다는
@@ -454,6 +463,7 @@ export default function Home() {
                   </div>
                   <h3>{notice.title}</h3>
                   <p>{notice.region} · {notice.housingType}</p>
+                  {notice.address && <p>📍 {notice.address}</p>}
                   <div className="noticeFacts">
                     <span><small>게시일</small><strong>{formatDate(notice.publishedAt)}</strong></span>
                     <span><small>접수 마감</small><strong>{formatDate(notice.applyEnd)}</strong></span>
@@ -508,27 +518,59 @@ export default function Home() {
                   <div className="briefGrid">
                     {housing.units.map(({ unit, link }, index) => (
                       <article key={`${unit.complexName ?? "unit"}-${index}`}>
-                        <small>{unit.complexName ?? "단지명 미확보"}{unit.sigungu ? ` · ${unit.sigungu}` : ""}</small>
+                        <small>{unit.complexName ?? "단지명 미확보"}{unit.sigungu ? ` · ${unit.sigungu}` : ""}{unit.supplyType ? ` · ${unit.supplyType}` : ""}</small>
+                        <p><b>📍 {unit.address ?? "주소 미확보"}</b></p>
                         <p>
-                          {unit.address ?? "주소 미확보"}
-                          {unit.deposit !== null ? ` · 보증금 ${unit.deposit.toLocaleString()}원` : ""}
-                          {unit.monthlyRent !== null ? ` · 월 ${unit.monthlyRent.toLocaleString()}원` : ""}
-                          {" · "}
                           {link.status === "matched"
-                            ? `전용 ${link.units.map((row) => row.exclusiveArea).filter(Boolean).join("㎡ · ")}㎡ (재고 대조${link.typeMatched ? " · 유형 일치" : ""})`
-                            : "전용면적 미확보 (재고에서 같은 단지를 찾지 못했습니다)"}
+                            ? `전용 ${link.units.map((row) => formatArea(row.exclusiveArea)).filter(Boolean).join(" / ")} (재고 대조${link.typeMatched ? " · 유형 일치" : ""})`
+                            : "전용면적 미확보 — 재고에서 같은 단지를 찾지 못했습니다"}
+                        </p>
+                        <p>
+                          {[
+                            formatManwon(unit.deposit) && `보증금 ${formatManwon(unit.deposit)}`,
+                            formatManwon(unit.monthlyRent) && `월임대료 ${formatManwon(unit.monthlyRent)}`,
+                          ].filter(Boolean).join(" · ") || "임대조건은 원문 확인"}
                         </p>
                       </article>
                     ))}
                   </div>
                 )}
                 {!housingLoading &&
-                  housing?.inventory?.map((entry) => (
-                    <div className="briefState" key={entry.district}>
-                      {entry.district} 재고 {entry.count.toLocaleString()}건
-                      {entry.fetchedAt ? ` · ${formatFetchedAt(entry.fetchedAt)} 기준` : " · 아직 받지 않았습니다"}
-                    </div>
-                  ))}
+                  housing?.inventory?.map((entry) => {
+                    const sample = entry.units ?? [];
+                    const complexes = summarizeInventory(sample);
+                    return (
+                      <div key={entry.district}>
+                        <div className="briefState">
+                          {entry.district} 매입임대 재고 {entry.count.toLocaleString()}건
+                          {entry.fetchedAt ? ` · ${formatFetchedAt(entry.fetchedAt)} 기준` : " · 아직 받지 않았습니다"}
+                          {" — 이 공고의 공급주택 목록이 아니라, 이 자치구에 있는 공공 매입임대 재고 참고 자료입니다. 실제 공급 위치·호수는 공고문에서 확인하세요."}
+                        </div>
+                        {complexes.length > 0 && (
+                          <div className="briefGrid">
+                            {complexes.slice(0, 8).map((complex) => (
+                              <article key={`${entry.district}-${complex.name}`}>
+                                <small>{complex.name} · 표본 {complex.count}호{complex.supplyTypes.length > 0 ? ` · ${complex.supplyTypes.join("·")}` : ""}</small>
+                                <p><b>📍 {complex.address ?? "주소 미확보"}</b></p>
+                                <p>
+                                  {complex.minArea !== null && complex.maxArea !== null
+                                    ? complex.minArea === complex.maxArea
+                                      ? `전용 ${formatArea(String(complex.minArea))}`
+                                      : `전용 ${complex.minArea}~${complex.maxArea}㎡ · 약 ${sqmToPyeong(complex.minArea)}~${sqmToPyeong(complex.maxArea)}평`
+                                    : "면적 미기재"}
+                                  {complex.minDeposit !== null ? ` · 보증금 ${formatManwon(complex.minDeposit)}${complex.maxDeposit !== complex.minDeposit ? ` ~ ${formatManwon(complex.maxDeposit)}` : ""}` : ""}
+                                  {complex.minRent !== null ? ` · 월 ${formatManwon(complex.minRent)}${complex.maxRent !== complex.minRent ? ` ~ ${formatManwon(complex.maxRent)}` : ""}` : ""}
+                                </p>
+                              </article>
+                            ))}
+                          </div>
+                        )}
+                        {complexes.length > 8 && (
+                          <div className="briefState">외 {complexes.length - 8}개 단지 — 표본 {sample.length}건 기준</div>
+                        )}
+                      </div>
+                    );
+                  })}
                 {!housingLoading && (housing?.districtsOmitted ?? 0) > 0 && (
                   <div className="briefState">자치구를 특정하지 않은 공고입니다({housing?.districtsOmitted}개 구). 재고는 원문에서 공급지역을 확인한 뒤 대조하세요.</div>
                 )}
