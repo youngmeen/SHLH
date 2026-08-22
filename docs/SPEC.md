@@ -79,7 +79,7 @@ A~C가 서로를 대체하지 않는다는 점이 중요하다. 공고 발견은
 - 실제 응답을 픽스처로 고정한 회귀 테스트를 쓴다. 네트워크에 의존하는 테스트를 만들지 않는다
 - 수집·판정·상세 추출·서버 렌더링·스키마 일치를 덮는다
 - 스키마는 수동 생성문과 drizzle 산출물이 어긋나면 실패하게 둔다
-- 실행: `npm test` (`node --test tests/*.test.mjs`). 확인: 2026-08-20 기준 **80개** 전부 통과
+- 실행: `npm test` (`node --test tests/*.test.mjs`). 확인: 2026-08-23 기준 **88개** 전부 통과
 - 파싱 규칙을 고칠 때는 그 케이스를 고정하는 테스트를 함께 추가한다
 
 ---
@@ -251,7 +251,7 @@ Phase 2 착수 전 기준이다. 각 항목은 직접 확인했다.
 | `app/lib/audience-match.ts` · `profile.ts` · `notice-types.ts` | 제목 기반 판정(Phase 3에서 정리) · 프로필 정규화 · 타입과 상수 |
 | `db/schema.ts` · `db/index.ts` | 7개 테이블 정의 · Supabase 연결(Pooler Session mode) |
 | `scripts/sync.sh` · `scripts/com.jib-alim.sync.plist` | 09:00·18:00 동기화 호출과 launchd 등록 파일 |
-| `tests/` | 회귀 테스트 80개 |
+| `tests/` | 회귀 테스트 88개 |
 
 제거된 것 — `vinext`·`wrangler`·`@cloudflare/vite-plugin`·`vite`·`worker/index.ts`·`db/env.ts`·`vite.config.ts`. `dist/`·`.vinext/`·`.wrangler/`는 옛 산출물이라 lint 대상에서 뺐다.
 
@@ -354,10 +354,10 @@ Phase 2의 핵심 출처다.
 
 ### 코드와 환경
 
-- `npm run lint` 통과, `npm test` **87개** 통과, `npx tsc --noEmit` 통과, `npm run build` 통과
+- `npm run lint` 통과, `npm test` **88개** 통과, `npx tsc --noEmit` 통과, `npm run build` 통과
 - 배포 경로가 없다(로컬 실행 유지)
 - 첨부파일 파서 의존성이 없다
-- 확인 환경: Node `v22.19.0`(테스트 실행은 `v26.7.0`), npm `10.9.3`
+- 확인 환경: Node `v26.7.0` · npm `11.19.0` (2026-08-23 재확인). `package.json`의 `engines`는 `>=22.13.0`이다. 2026-08-20 최초 확인은 Node `v22.19.0` · npm `10.9.3`에서 했다
 
 ### 자주 겪는 실행 오류 (README에서 옮김, 2026-08-23)
 

@@ -41,10 +41,11 @@ npm run lint
 npm test
 ```
 
-`.env.local`에 두 개가 있어야 한다.
+`.env.local`에 두 개가 있어야 한다. 값은 각자 직접 넣는다 — `.env.example`을 복사해서 채우고, 이 파일은 git에 올리지 않는다(R45).
 
 - `DATA_GO_KR_API_KEY` — 공공데이터포털 일반 인증키. 계정 인증키 하나로 활용신청이 승인된 모든 API를 호출한다
-- `DATABASE_URL` — Supabase Postgres 접속 문자열
+- `DATABASE_URL` — Supabase Postgres 접속 문자열. 직접 연결은 IPv6 전용이라 Connection Pooler를 쓴다(`docs/SPEC.md` 5절)
+- `BACKUP_PATH` — (선택) 동기화 성공 시 남기는 로컬 백업 경로. 비우면 `backups/jib-alim-export.json`
 
 **스택: Node + Next.js + Supabase Postgres(Drizzle).** 2026-08-20에 Cloudflare Workers·vinext·로컬 D1에서 옮겼다. 이유와 이동 범위는 `docs/SPEC.md` S1에 있다. 저장소는 Supabase 무료 티어이며 **백업이 없고 1주 방치 시 일시정지**되므로 내보내기를 유지한다.
 
