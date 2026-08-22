@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SEOUL_DISTRICTS, shortDistrictName, type District, type NoticeFeed } from "./lib/notice-types";
 import { initialNoticeFeed } from "./lib/initial-notice-feed";
 import { evaluateAudience, type AudienceStatus, type MaritalStatus } from "./lib/audience-match";
-import { defaultProfile, parseProfile, type Profile } from "./lib/profile";
+import { ageOnDate, evaluateEligibility, type EligibilityStatus } from "./lib/eligibility";
+import { defaultProfile, parseProfile, type Profile, type Residence, type Welfare } from "./lib/profile";
 import type { NoticeDetail } from "./lib/notice-detail";
 
 type AgencyFilter = "all" | "LH" | "SH";
@@ -55,6 +56,14 @@ const fitPresentation: Record<AudienceStatus, { shortlist: string; verdict: stri
   review: { shortlist: "자격 추가 확인", verdict: "자격 확인 후 검토", tone: "manual", mark: "!" },
   mismatch: { shortlist: "자격 추가 확인", verdict: "현재 조건으로 비추천", tone: "fail", mark: "×" },
 };
+
+// 자격 판정(Phase 3) 항목 상태의 화면 표기. 기존 checks 구역의 클래스를 그대로 쓴다.
+const eligibilityPresentation: Record<EligibilityStatus, { tone: string; mark: string; word: string }> = {
+  met: { tone: "pass", mark: "✓", word: "충족" },
+  review: { tone: "manual", mark: "!", word: "확인 필요" },
+  unmet: { tone: "fail", mark: "×", word: "미충족" },
+};
+const verdictTone: Record<string, string> = { eligible: "pass", review: "manual", ineligible: "fail" };
 
 // 판정 상태별 묶음 제목. fitPresentation과 달리 목록 묶음용 문구다.
 const groupTitles: Record<AudienceStatus, string> = {
@@ -299,7 +308,7 @@ export default function Home() {
     };
   }, [selectedSourceUrl]);
 
-  function updateNumber(key: "age" | "householdSize" | "monthlyIncome" | "totalAssets" | "children", value: string) {
+  function updateNumber(key: "age" | "householdSize" | "monthlyIncome" | "totalAssets" | "children" | "carValue" | "subscriptionPaymentCount", value: string) {
     setProfile((current) => ({ ...current, [key]: Math.max(0, Number(value) || 0) }));
   }
 
@@ -359,7 +368,13 @@ export default function Home() {
     };
   }, [selectedNoticeId]);
 
-  const profileSummary = `${profile.age}세 · ${profile.householdSize}인 · ${profile.monthlyIncome.toLocaleString()}만원`;
+  // 생년월일이 있으면 오늘 기준 만 나이를 보여준다. 판정 표는 공고일 기준으로 따로 계산한다(R12).
+  const todayAge = ageOnDate(profile.birthDate, new Date().toISOString().slice(0, 10)) ?? profile.age;
+  const profileSummary = `만 ${todayAge}세 · ${profile.householdSize}인 · ${profile.monthlyIncome.toLocaleString()}만원`;
+  // 자격 판정(Phase 3). 상세 텍스트가 아직 없으면 없는 대로 판정한다 — 그 항목은 확인 필요로 나온다(R14).
+  const eligibility = selected
+    ? evaluateEligibility(profile, { title: selected.title, publishedAt: selected.publishedAt }, noticeDetail?.eligibility ?? null)
+    : null;
   const okSources = feed.sources.filter((source) => source.ok).length;
 
   return (
@@ -521,13 +536,21 @@ export default function Home() {
 
               <div className="detailGrid">
                 <div className="checks">
-                  <div className="pass"><span>✓</span><div><strong>관심 지역</strong><small>{selected.region}</small></div></div>
-                  <div className="manual"><span>!</span><div><strong>월소득 기준</strong><small>입력 {profile.monthlyIncome.toLocaleString()}만원 · 원문 기준 확인 필요</small></div></div>
-                  <div className="manual"><span>!</span><div><strong>총자산 기준</strong><small>입력 {profile.totalAssets.toLocaleString()}만원 · 원문 기준 확인 필요</small></div></div>
-                  <div className={fitPresentation[selectedResult.fit.status].tone}><span>{fitPresentation[selectedResult.fit.status].mark}</span><div><strong>공고 대상 신호 · {selectedResult.fit.label}</strong><small>{selectedResult.fit.detail}</small></div></div>
-                  <div className="manual"><span>!</span><div><strong>혼인·가구 조건</strong><small>{maritalLabels[profile.maritalStatus]} · {profile.householdSize}인 가구{profile.isSingleParent ? " · 한부모" : ""}</small></div></div>
-                  <div className="manual"><span>!</span><div><strong>자녀·출산 조건</strong><small>자녀 {profile.children}명{profile.isPregnant ? " · 임신 중" : ""}{profile.youngestChildBirthDate ? ` · 막내 ${profile.youngestChildBirthDate}` : ""}</small></div></div>
-                  <div className="manual"><span>!</span><div><strong>무주택 조건</strong><small>{profile.hasHouse ? "주택 보유 입력 · 신청 제한 가능성 확인" : "무주택 입력 · 세대구성원 범위 확인 필요"}</small></div></div>
+                  {eligibility && (
+                    <div className={verdictTone[eligibility.verdict]}>
+                      <span>{eligibilityPresentation[eligibility.verdict === "eligible" ? "met" : eligibility.verdict === "ineligible" ? "unmet" : "review"].mark}</span>
+                      <div>
+                        <strong>{eligibility.audienceLabel} · {eligibility.verdictLabel}</strong>
+                        <small>{detailLoading ? "원문 기준을 읽는 중 — 판정이 갱신될 수 있습니다" : noticeDetail?.eligibility ? "공식 상세의 신청자격 문구를 함께 판정했습니다" : "원문 기준을 읽지 못해 입력값 기준의 판정입니다"}</small>
+                      </div>
+                    </div>
+                  )}
+                  {eligibility?.items.map((entry) => (
+                    <div className={eligibilityPresentation[entry.status].tone} key={entry.key}>
+                      <span>{eligibilityPresentation[entry.status].mark}</span>
+                      <div><strong>{entry.label} · {eligibilityPresentation[entry.status].word}</strong><small>{entry.basis}</small></div>
+                    </div>
+                  ))}
                 </div>
                 <aside className="telegramPreview">
                   <div className="telegramTop"><span className="telegramLogo">T</span><div><strong>집알림 봇</strong><small>알림 예시</small></div></div>
@@ -562,10 +585,11 @@ export default function Home() {
               </fieldset>
 
               <div className="inputGrid">
-                <label><span>나이</span><div><input type="number" min="19" max="100" value={profile.age} onChange={(event) => updateNumber("age", event.target.value)} /><em>세</em></div></label>
+                <label><span>생년월일</span><div><input type="date" value={profile.birthDate} onChange={(event) => updateField("birthDate", event.target.value)} /><em>{profile.birthDate ? `만 ${todayAge}세` : `미입력 · ${profile.age}세로 판정`}</em></div></label>
                 <label><span>가구원</span><div><input type="number" min="1" max="10" value={profile.householdSize} onChange={(event) => updateNumber("householdSize", event.target.value)} /><em>명</em></div></label>
                 <label className="wide"><span>세대 월소득</span><div><input type="number" min="0" step="10" value={profile.monthlyIncome} onChange={(event) => updateNumber("monthlyIncome", event.target.value)} /><em>만원</em></div></label>
                 <label className="wide"><span>총자산</span><div><input type="number" min="0" step="100" value={profile.totalAssets} onChange={(event) => updateNumber("totalAssets", event.target.value)} /><em>만원</em></div></label>
+                <label className="wide"><span>자동차 가액</span><div><input type="number" min="0" step="100" value={profile.carValue} onChange={(event) => updateNumber("carValue", event.target.value)} /><em>만원 · 0=없음</em></div></label>
                 <label><span>자녀 수</span><div><input type="number" min="0" max="10" value={profile.children} onChange={(event) => updateNumber("children", event.target.value)} /><em>명</em></div></label>
                 <label><span>막내 생년월일</span><div><input type="date" disabled={profile.children === 0} value={profile.youngestChildBirthDate} onChange={(event) => updateField("youngestChildBirthDate", event.target.value)} /></div></label>
               </div>
@@ -579,13 +603,38 @@ export default function Home() {
 
               {profile.maritalStatus !== "single" && <div className="inputGrid profileDateField"><label className="wide"><span>{profile.maritalStatus === "married" ? "혼인신고일" : "혼인예정일"}</span><div><input type="date" value={profile.marriageDate} onChange={(event) => updateField("marriageDate", event.target.value)} /></div></label></div>}
 
+              <fieldset className="fieldGroup segmentGroup">
+                <legend>거주지</legend>
+                <div className="threeWay">
+                  {([["seoul", "서울"], ["capital", "수도권(서울 외)"], ["other", "그 외"]] as [Residence, string][]).map(([value, label]) => (
+                    <label className={profile.residence === value ? "checked" : ""} key={value}><input type="radio" name="residence" checked={profile.residence === value} onChange={() => updateField("residence", value)} />{label}</label>
+                  ))}
+                </div>
+              </fieldset>
+
+              <fieldset className="fieldGroup segmentGroup">
+                <legend>복지자격 (순위 판정용)</legend>
+                <div className="threeWay">
+                  {([["none", "해당 없음"], ["recipient", "수급자"], ["near-poor", "차상위"]] as [Welfare, string][]).map(([value, label]) => (
+                    <label className={profile.welfare === value ? "checked" : ""} key={value}><input type="radio" name="welfare" checked={profile.welfare === value} onChange={() => updateField("welfare", value)} />{label}</label>
+                  ))}
+                </div>
+              </fieldset>
+
               <div className="toggleStack">
+                <label className="houseToggle"><div><strong>청약통장 보유</strong><span>주택청약종합저축 등</span></div><input type="checkbox" checked={profile.hasSubscriptionAccount} onChange={(event) => updateField("hasSubscriptionAccount", event.target.checked)} /></label>
                 <label className="houseToggle"><div><strong>임신 중</strong><span>태아 포함 기준 확인용</span></div><input type="checkbox" checked={profile.isPregnant} onChange={(event) => updateField("isPregnant", event.target.checked)} /></label>
                 <label className="houseToggle"><div><strong>한부모 가구</strong><span>특별공급 대상 확인용</span></div><input type="checkbox" checked={profile.isSingleParent} onChange={(event) => updateField("isSingleParent", event.target.checked)} /></label>
                 <label className="houseToggle"><div><strong>주택 보유</strong><span>무주택 세대구성원 확인용</span></div><input type="checkbox" checked={profile.hasHouse} onChange={(event) => updateField("hasHouse", event.target.checked)} /></label>
               </div>
 
-              <div className="privacyCard"><strong>입력값 보호</strong><p>프로필은 이 컴퓨터의 로컬 데이터베이스에만 저장하며 공식 API나 외부 서비스로 전송하지 않습니다. 알림이 브라우저를 열지 않고도 판정하기 위해 저장합니다. 소득·자산 자동판정은 상세 기준 구조화 후 연결됩니다.</p></div>
+              {profile.hasSubscriptionAccount && (
+                <div className="inputGrid profileDateField">
+                  <label className="wide"><span>납입 인정 회차</span><div><input type="number" min="0" step="1" value={profile.subscriptionPaymentCount} onChange={(event) => updateNumber("subscriptionPaymentCount", event.target.value)} /><em>회</em></div></label>
+                </div>
+              )}
+
+              <div className="privacyCard"><strong>입력값 보호</strong><p>프로필은 이 컴퓨터의 로컬 데이터베이스에만 저장하며 공식 API나 외부 서비스로 전송하지 않습니다. 알림이 브라우저를 열지 않고도 판정하기 위해 저장합니다. 자산·자동차는 원문에서 금액을 읽으면 자동 비교하고, 소득 기준표(가구원수별 금액)는 공고문에서 확인해야 합니다.</p></div>
             </div>
 
             <div className="profileDialogFooter">
