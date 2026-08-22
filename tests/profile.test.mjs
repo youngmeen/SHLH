@@ -12,10 +12,16 @@ test("저장된 값이 없으면 기본 프로필을 돌려준다", () => {
 test("저장된 값을 그대로 읽는다", () => {
   const profile = parseProfile({
     districts: ["강남구", "마포구"],
+    birthDate: "1984-03-02",
     age: 42,
     householdSize: 3,
     monthlyIncome: 500,
     totalAssets: 30000,
+    carValue: 1200,
+    residence: "capital",
+    welfare: "recipient",
+    hasSubscriptionAccount: true,
+    subscriptionPaymentCount: 24,
     hasHouse: true,
     maritalStatus: "married",
     marriageDate: "2020-05-01",
@@ -27,10 +33,16 @@ test("저장된 값을 그대로 읽는다", () => {
 
   assert.deepEqual(profile, {
     districts: ["강남구", "마포구"],
+    birthDate: "1984-03-02",
     age: 42,
     householdSize: 3,
     monthlyIncome: 500,
     totalAssets: 30000,
+    carValue: 1200,
+    residence: "capital",
+    welfare: "recipient",
+    hasSubscriptionAccount: true,
+    subscriptionPaymentCount: 24,
     hasHouse: true,
     maritalStatus: "married",
     marriageDate: "2020-05-01",
